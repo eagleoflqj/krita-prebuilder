@@ -42,7 +42,7 @@ The supplement contains GNU gettext host tools, libintl, KI18n/Transcript and Qt
 
 ## QtCore correction supplement
 
-Fresh full builds include the Qt native-event dispatch patch. Consumers that need a separate archive bound to an immutable base can generate the existing supplement with:
+Fresh full builds include the Qt native-event dispatch patches. Queued browser events snapshot their transient target and composed path before dispatch returns; the event-loop probe exercises this through a real Shadow DOM pointer event as well as synchronous dialogs, threads and exceptions. Consumers that need a separate archive bound to an immutable base can generate the existing supplement with:
 
 ```sh
 python3 scripts/qtcore-correction.py --base-sdk PATH_TO_VERIFIED_BASE --output cache/prebuilt/qtcore-local

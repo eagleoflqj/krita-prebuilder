@@ -105,8 +105,26 @@ int main(int argc, char **argv) {
                 "pthreads, C++ exceptions and main-thread suspension coexist");
         require(EM_ASM_INT({ return globalThis.loopHeartbeat > 0;}),
                            "browser event loop remains responsive");
-        std::printf("LOOP_PROBE_OK: %d checks\n", checks);
-        EM_ASM({ fetch('/__probe_result?status=LOOP_PROBE_OK');});
+        require(EM_ASM_INT({
+            const windowElement = document.getElementById('screen')
+                .querySelector('#qt-shadow-container').shadowRoot.querySelector('.qt-window');
+            const event = new PointerEvent('pointerenter', {
+                pointerType: 'mouse', composed: false, cancelable: true, clientX: 5, clientY: 5
+            });
+            event.qtEventSnapshotProbe = true;
+            windowElement.dispatchEvent(event);
+            const queued = Module.qtSuspendResumeControl.pendingEvents.find(
+                item => item.arg && item.arg.qtEventSnapshotProbe);
+            if (!queued || event.target !== null || queued.arg.target !== windowElement
+                || !queued.arg.composedPath().includes(windowElement))
+                return 0;
+            queued.arg.preventDefault();
+            return event.defaultPrevented ? 1 : 0;
+        }), "queued DOM event preserves its target, path and bound methods");
+        QTimer::singleShot(0, &app, [] {
+            std::printf("LOOP_PROBE_OK: %d checks\n", checks);
+            EM_ASM({ fetch('/__probe_result?status=LOOP_PROBE_OK');});
+        });
     });
     QTimer::singleShot(50, &button, &QPushButton::click);
     return app.exec();

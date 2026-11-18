@@ -1,0 +1,15 @@
+Subject: [PATCH] Include ctime for std::mktime
+
+Do not depend on a transitive C header adding the C++ namespace declarations.
+
+diff --git a/src/value.cpp b/src/value.cpp
+--- a/src/value.cpp
++++ b/src/value.cpp
+@@ -9,6 +9,7 @@
+ #include "types.hpp"
+ 
+ // + standard includes
++#include <ctime>
+ #include <sstream>
+ 
+ // *****************************************************************************

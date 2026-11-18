@@ -1,0 +1,23 @@
+diff --git a/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp b/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp
+--- a/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp
++++ b/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp
+@@ -167,14 +167,17 @@
+     int count = pendingEvents["length"].as<int>();
+     if (count == 0)
+         return false;
+-    while (count-- > 0) {
++    int sent = 0;
++    // A handler can enter a nested event loop and drain the shared queue.
++    while (count-- > 0 && pendingEvents["length"].as<int>() > 0) {
+         // Grab one event (handler and arg), and call it
+         emscripten::val event = pendingEvents.call<val>("shift");
+         auto it = m_eventHandlers.find(event["index"].as<int>());
+         Q_ASSERT(it != m_eventHandlers.end());
+         it->second(event["arg"]);
++        ++sent;
+     }
+-    return count;
++    return sent;
+ }
+ 
+ void qtSendPendingEvents()

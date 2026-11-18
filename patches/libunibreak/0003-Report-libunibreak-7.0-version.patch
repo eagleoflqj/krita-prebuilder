@@ -1,0 +1,16 @@
+Subject: [PATCH] Report the version of the pinned libunibreak source
+
+The upstream dependency CMake recipe still declared 5.0.
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -4,7 +4,7 @@
+ 
+ cmake_minimum_required(VERSION 3.29.0)
+ 
+-project(libunibreak VERSION 5.0 LANGUAGES C)
++project(libunibreak VERSION 7.0 LANGUAGES C)
+ 
+ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
+ 

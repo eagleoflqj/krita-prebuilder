@@ -1,0 +1,22 @@
+From: krita.js contributors
+Subject: [PATCH] cmake: accept CFGDIR-relative paths in newer emsdk configs
+
+Newer emsdk writes EMSCRIPTEN_ROOT = '$CFGDIR/upstream/emscripten'.
+Qt 6.10.2 expects a suffix relative to EMSDK and otherwise attempts to run
+emsdk/$CFGDIR/upstream/emscripten/emcc. Strip the placeholder from the
+suffix; do not rewrite the user's shared emsdk configuration.
+
+Applies to: qtbase 6.10.2
+Upstream status: local PoC compatibility patch, not submitted
+
+diff --git a/cmake/QtPublicWasmToolchainHelpers.cmake b/cmake/QtPublicWasmToolchainHelpers.cmake
+--- a/cmake/QtPublicWasmToolchainHelpers.cmake
++++ b/cmake/QtPublicWasmToolchainHelpers.cmake
+@@ -14,6 +14,7 @@ function(__qt_internal_get_emroot_path_suffix_from_emsdk_env out_var)
+     string(REGEX MATCH "EMSCRIPTEN_ROOT.*$" EMROOT "${ver}")
+     string(REGEX MATCH "'([^' ]*)'" EMROOT2 "${EMROOT}")
+     string(REPLACE "'" "" EMROOT_PATH "${EMROOT2}")
++    string(REPLACE "$CFGDIR" "" EMROOT_PATH "${EMROOT_PATH}")
+ 
+     set(${out_var} "${EMROOT_PATH}" PARENT_SCOPE)
+ endfunction()

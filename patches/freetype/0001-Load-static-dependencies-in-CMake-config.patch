@@ -1,0 +1,41 @@
+Subject: [PATCH] Discover static dependencies in the installed CMake config
+
+The export references HarfBuzz::HarfBuzz, PNG::PNG and ZLIB::ZLIB.
+A consumer must not have to discover them implicitly by linking unrelated libraries.
+
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -680,8 +680,13 @@
+   install(
+     EXPORT freetype-targets
+       DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/freetype
+-      FILE freetype-config.cmake
++      FILE freetype-targets.cmake
+       COMPONENT headers)
++  configure_file(builds/cmake/freetype-config.cmake.in
++    ${PROJECT_BINARY_DIR}/freetype-config.cmake @ONLY)
++  install(FILES ${PROJECT_BINARY_DIR}/freetype-config.cmake
++    builds/cmake/FindHarfBuzz.cmake
++    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/freetype)
+   install(
+     FILES ${PROJECT_BINARY_DIR}/freetype-config-version.cmake
+     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/freetype
+--- /dev/null
++++ b/builds/cmake/freetype-config.cmake.in
+@@ -0,0 +1,16 @@
++# Load the dependencies referenced by the static export before importing it.
++include(CMakeFindDependencyMacro)
++if(@ZLIB_FOUND@)
++  find_dependency(ZLIB)
++endif()
++if(@PNG_FOUND@)
++  find_dependency(PNG)
++endif()
++if(@HarfBuzz_FOUND@)
++  set(_freetype_saved_module_path "${CMAKE_MODULE_PATH}")
++  list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
++  find_dependency(HarfBuzz 2.0)
++  set(CMAKE_MODULE_PATH "${_freetype_saved_module_path}")
++  unset(_freetype_saved_module_path)
++endif()
++include("${CMAKE_CURRENT_LIST_DIR}/freetype-targets.cmake")

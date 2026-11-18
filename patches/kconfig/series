@@ -1,0 +1,3 @@
+0001-support-Qt-without-process-and-timezone-backends.patch
+0002-keep-command-line-tools-in-host-build.patch
+0003-retain-precompiled-GUI-registration-on-static-Wasm.patch

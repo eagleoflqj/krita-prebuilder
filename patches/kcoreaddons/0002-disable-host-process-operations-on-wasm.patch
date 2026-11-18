@@ -1,0 +1,100 @@
+From: krita-wasm-sdk contributors
+Subject: [PATCH] coreaddons: report unsupported browser process operations
+
+Qt Wasm disables QProcess. Exclude process execution and sandbox helpers,
+replace host process enumeration with explicit unsupported results, and
+report NotSupported asynchronously for KListOpenFilesJob. No host process
+is simulated. Other native platforms retain their existing sources.
+
+Applies to: KCoreAddons 6.24.0
+Upstream status: local Wasm porting patch, not submitted
+
+diff --git a/src/lib/CMakeLists.txt b/src/lib/CMakeLists.txt
+--- a/src/lib/CMakeLists.txt
++++ b/src/lib/CMakeLists.txt
+@@ -79,10 +79,16 @@
+ if (UNIX AND NOT IOS)
+     target_sources(KF6CoreAddons PRIVATE
+         text/kmacroexpander_unix.cpp
+-        util/klistopenfilesjob_unix.cpp
+         util/kuser_unix.cpp
+         util/kshell_unix.cpp
+     )
++    if (EMSCRIPTEN)
++        target_sources(KF6CoreAddons PRIVATE
++            util/klistopenfilesjob_wasm.cpp
++            util/kprocesslist_wasm.cpp
++        )
++    else()
++        target_sources(KF6CoreAddons PRIVATE util/klistopenfilesjob_unix.cpp)
+     if (HAVE_PROCSTAT)
+         target_sources(KF6CoreAddons PRIVATE
+             util/kprocesslist_unix_procstat.cpp
+@@ -93,6 +99,7 @@
+             util/kprocesslist_unix.cpp
+         )
+     endif ()
++    endif()
+ endif ()
+ 
+ if(HAVE_QTDBUS)
+@@ -186,7 +193,7 @@
+     target_sources(KF6CoreAddons PRIVATE util/ksystemclockskewnotifierengine_dbus.cpp)
+ endif()
+ 
+-if(NOT IOS)
++if(NOT IOS AND QT_FEATURE_process)
+     target_sources(KF6CoreAddons PRIVATE
+         io/kprocess.cpp
+         util/ksandbox.cpp
+diff --git a/src/lib/util/klistopenfilesjob_wasm.cpp b/src/lib/util/klistopenfilesjob_wasm.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/lib/util/klistopenfilesjob_wasm.cpp
+@@ -0,0 +1,25 @@
++// SPDX-License-Identifier: LGPL-2.1-or-later
++// SPDX-FileCopyrightText: 2026 krita-wasm-sdk contributors
++#include "klistopenfilesjob.h"
++#include <QTimer>
++
++class KListOpenFilesJobPrivate {};
++
++KListOpenFilesJob::KListOpenFilesJob(const QString &) : d(nullptr) {}
++KListOpenFilesJob::~KListOpenFilesJob() = default;
++
++void KListOpenFilesJob::start()
++{
++    QTimer::singleShot(0, this, [this] {
++        setError(static_cast<int>(Error::NotSupported));
++        setErrorText(tr("Listing host process files is not supported in a browser"));
++        emitResult();
++    });
++}
++
++KProcessList::KProcessInfoList KListOpenFilesJob::processInfoList() const
++{
++    return {};
++}
++
++#include "moc_klistopenfilesjob.cpp"
+diff --git a/src/lib/util/kprocesslist_wasm.cpp b/src/lib/util/kprocesslist_wasm.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/lib/util/kprocesslist_wasm.cpp
+@@ -0,0 +1,16 @@
++// SPDX-License-Identifier: LGPL-2.1-or-later
++// SPDX-FileCopyrightText: 2026 krita-wasm-sdk contributors
++#include "kprocesslist.h"
++#include <QDebug>
++
++KProcessList::KProcessInfoList KProcessList::processInfoList()
++{
++    qWarning("Host process enumeration is not supported in a browser");
++    return {};
++}
++
++KProcessList::KProcessInfo KProcessList::processInfo(qint64)
++{
++    qWarning("Host process inspection is not supported in a browser");
++    return {};
++}

@@ -1,0 +1,21 @@
+From: krita.js contributors
+Subject: [PATCH] core: include stdlib.h directly for getenv
+
+qsimd.cpp calls getenv but relies on a transitive declaration. The
+Emscripten 7.0.0 headers no longer provide it along this include path.
+Include its defining header rather than altering the CPU feature logic.
+
+Applies to: qtbase 6.10.2
+Upstream status: local PoC compatibility patch, not submitted
+
+diff --git a/src/corelib/global/qsimd.cpp b/src/corelib/global/qsimd.cpp
+--- a/src/corelib/global/qsimd.cpp
++++ b/src/corelib/global/qsimd.cpp
+@@ -10,6 +10,7 @@
+ #include "qalgorithms.h"
+ 
+ #include <stdio.h>
++#include <stdlib.h>
+ #include <string.h>
+ 
+ #if defined(QT_NO_DEBUG) && !defined(NDEBUG)

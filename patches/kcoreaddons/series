@@ -1,0 +1,4 @@
+0001-handle-failed-dladdr-check.patch
+0002-disable-host-process-operations-on-wasm.patch
+0003-report-unknown-browser-filesystem-type.patch
+0004-support-Qt-without-timezone-backend.patch

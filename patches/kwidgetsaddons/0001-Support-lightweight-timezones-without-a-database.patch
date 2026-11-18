@@ -1,0 +1,92 @@
+Subject: [PATCH] Support UTC and fixed offsets without a timezone database
+
+Keep named timezone handling on full Qt builds. Lightweight QTimeZone values
+retain offsets, including seconds; unsupported names are not reinterpreted.
+
+--- a/src/kdatetimeedit.cpp
++++ b/src/kdatetimeedit.cpp
+@@ -60,11 +60,13 @@
+     m_dateTime = QDateTime::currentDateTime();
+     m_dateTime.setTime(QTime(0, 0, 0));
+     m_calendarLocales << q->locale();
++#if QT_CONFIG(timezone)
+     const auto zoneIds = QTimeZone::availableTimeZoneIds();
+     m_zones.reserve(zoneIds.size());
+     for (const QByteArray &zoneId : zoneIds) {
+         m_zones << QTimeZone(zoneId);
+     }
++#endif
+ }
+ 
+ KDateTimeEditPrivate::~KDateTimeEditPrivate()
+@@ -171,7 +173,14 @@
+     ui.m_timeZoneCombo->addItem(KDateTimeEdit::tr("UTC", "@item:inlistbox UTC time zone"), QByteArray("UTC"));
+     ui.m_timeZoneCombo->addItem(KDateTimeEdit::tr("Floating", "@item:inlistbox No specific time zone"), QByteArray());
+     for (const QTimeZone &zone : std::as_const(m_zones)) {
++#if QT_CONFIG(timezone)
+         ui.m_timeZoneCombo->addItem(QString::fromUtf8(zone.id()), zone.id());
++#else
++        if (zone.timeSpec() == Qt::OffsetFromUTC) {
++            const auto seconds = QByteArray::number(zone.fixedSecondsAheadOfUtc());
++            ui.m_timeZoneCombo->addItem(KDateTimeEdit::tr("UTC offset %1 seconds").arg(QString::fromLatin1(seconds)), QByteArray("offset:").append(seconds));
++        }
++#endif
+     }
+     ui.m_timeZoneCombo->setVisible((m_options & KDateTimeEdit::ShowTimeZone) == KDateTimeEdit::ShowTimeZone);
+     ui.m_timeZoneCombo->setEnabled((m_options & KDateTimeEdit::SelectTimeZone) == KDateTimeEdit::SelectTimeZone);
+@@ -192,9 +201,29 @@
+ 
+ void KDateTimeEditPrivate::enterTimeZone(const QByteArray &zoneId)
+ {
++#if QT_CONFIG(timezone)
+     q->setTimeZone(QTimeZone(zoneId));
++#else
++    if (zoneId.isEmpty()) {
++        q->setTimeZone(QTimeZone::LocalTime);
++    } else if (zoneId == "UTC") {
++        q->setTimeZone(QTimeZone::UTC);
++    } else if (zoneId.startsWith("offset:")) {
++        bool ok = false;
++        const int offset = zoneId.mid(7).toInt(&ok);
++        const auto zone = QTimeZone::fromSecondsAheadOfUtc(offset);
++        if (!ok || !zone.isValid()) {
++            qWarning("Invalid fixed-offset timezone");
++            return;
++        }
++        q->setTimeZone(zone);
++    } else {
++        qWarning("Named timezone backend is unavailable");
++        return;
++    }
++#endif
+     Q_EMIT q->dateTimeEntered(m_dateTime);
+-    Q_EMIT q->timeZoneEntered(m_dateTime.timeZone());
++    Q_EMIT q->timeZoneEntered(m_dateTime.timeRepresentation());
+ }
+ 
+ void KDateTimeEditPrivate::warnDateTime()
+@@ -272,7 +301,7 @@
+ 
+ QTimeZone KDateTimeEdit::timeZone() const
+ {
+-    return d->m_dateTime.timeZone();
++    return d->m_dateTime.timeRepresentation();
+ }
+ 
+ bool KDateTimeEdit::isValid() const
+@@ -369,13 +398,13 @@
+ 
+ void KDateTimeEdit::setTimeZone(const QTimeZone &zone)
+ {
+-    if (zone == d->m_dateTime.timeZone() || !zone.isValid()) {
++    if (zone == d->m_dateTime.timeRepresentation() || !zone.isValid()) {
+         return;
+     }
+ 
+     assignTimeZone(zone);
+     Q_EMIT dateTimeChanged(d->m_dateTime);
+-    Q_EMIT timeZoneChanged(d->m_dateTime.timeZone());
++    Q_EMIT timeZoneChanged(d->m_dateTime.timeRepresentation());
+ }
+ 
+ void KDateTimeEdit::assignTimeZone(const QTimeZone &zone)

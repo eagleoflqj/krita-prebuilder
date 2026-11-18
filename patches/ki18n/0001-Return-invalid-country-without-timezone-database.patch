@@ -1,0 +1,15 @@
+Subject: [PATCH] Return invalid country without a timezone database
+
+--- a/src/localedata/ktimezone.cpp
++++ b/src/localedata/ktimezone.cpp
+@@ -27,5 +27,10 @@
+         return {};
+     }
+ 
++#if QT_CONFIG(timezone)
+     return KCountry::fromQLocale(QTimeZone(ianaId).territory());
++#else
++    qWarning("KI18n: country lookup needs a named timezone backend");
++    return {};
++#endif
+ }

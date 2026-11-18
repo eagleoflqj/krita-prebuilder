@@ -1,0 +1,33 @@
+Subject: [PATCH] Report MIME editor unavailability without Qt process support
+
+--- a/src/kmimetypeeditor.cpp
++++ b/src/kmimetypeeditor.cpp
+@@ -9,13 +9,22 @@
+ #include "kmessagedialog.h"
+ 
+ #include <QObject>
++#if QT_CONFIG(process)
+ #include <QProcess>
++#endif
+ #include <QStandardPaths>
+ 
+ static const char s_keditfiletypeExecutable[] = "keditfiletype";
+ 
+ void KMimeTypeEditor::editMimeType(const QString &mimeType, QWidget *widget)
+ {
++#if !QT_CONFIG(process)
++    Q_UNUSED(mimeType)
++    auto *dlg = new KMessageDialog(KMessageDialog::Error, QObject::tr("MIME type editing is unavailable on this platform."), widget);
++    dlg->setAttribute(Qt::WA_DeleteOnClose);
++    dlg->setModal(true);
++    dlg->show();
++#else
+     QStringList args;
+ #ifndef Q_OS_WIN
+     args << QStringLiteral("--parent") << QString::number(widget->window()->winId());
+@@ -39,4 +48,5 @@
+         dlg->setModal(true);
+         dlg->show();
+     }
++#endif
+ }

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+prefix="$root/build/install-jspi"
+supplement="$root/build/i18n-jspi/install"
+output="$root/build/jspi/sdk-i18n"
+python3 "$root/scripts/i18n-fixtures.py"
+"$root/scripts/with-emsdk" "$prefix/target/bin/qt-cmake" \
+  -S "$root/tests/smoke-i18n" -B "$output" -G Ninja \
+  "-DQT_HOST_PATH=$prefix/host" "-DQT_HOST_PATH_CMAKE_DIR=$prefix/host/lib/cmake" \
+  "-DCMAKE_PREFIX_PATH=$prefix/target" "-DCMAKE_FIND_ROOT_PATH=$prefix/target" \
+  "-DI18N_PREFIX=$supplement" "-DCATALOGS=$root/build/i18n/fixtures" \
+  "-DCMAKE_CXX_FLAGS=-pthread -fwasm-exceptions"
+"$root/scripts/with-emsdk" cmake --build "$output" --parallel 4
+cp -- "$root/tests/smoke-i18n/index.html" "$output/index.html"
+"$root/scripts/with-emsdk" emcc "$root/tests/smoke-i18n/gettext.c" \
+  -I"$supplement/target/include" "$supplement/target/lib/libintl.a" \
+  -pthread "-fwasm-exceptions" -O2 -sENVIRONMENT=node \
+  --preload-file "$root/build/i18n/fixtures@/probe/share" \
+  -o "$output/gettext.js"

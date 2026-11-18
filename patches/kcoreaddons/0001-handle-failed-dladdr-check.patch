@@ -1,0 +1,21 @@
+From: krita-wasm-sdk contributors
+Subject: [PATCH] cmake: keep the condition argument when dladdr is absent
+
+CheckSymbolExists stores an empty string on failure. Unquoted expansion
+drops the condition argument entirely, making add_feature_info fail.
+
+Applies to: KCoreAddons 6.24.0
+Upstream status: local portability fix, not submitted
+
+diff --git a/src/lib/CMakeLists.txt b/src/lib/CMakeLists.txt
+--- a/src/lib/CMakeLists.txt
++++ b/src/lib/CMakeLists.txt
+@@ -20,7 +20,7 @@
+     endif()
+     check_dladdr()
+ 
+-    add_feature_info(dladdr ${HAVE_DLADDR} "Can resolve shared library paths and by extension libexec paths at runtime using dladdr() API")
++    add_feature_info(dladdr "${HAVE_DLADDR}" "Can resolve shared library paths and by extension libexec paths at runtime using dladdr() API")
+ endif()
+ 
+ set(ACCOUNTS_SERVICE_ICON_DIR "/var/lib/AccountsService/icons" CACHE STRING "Accounts Services icon storage directory")

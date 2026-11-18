@@ -1,0 +1,19 @@
+diff --git a/cmake/gsl-config.cmake.in b/cmake/gsl-config.cmake.in
+--- a/cmake/gsl-config.cmake.in
++++ b/cmake/gsl-config.cmake.in
+@@ -4,12 +4,14 @@
+ endif()
+ 
+ # Extra target information
++get_filename_component(_GSL_PREFIX "${_SELF_DIR}/../../.." ABSOLUTE)
+ set_target_properties(GSL::gsl PROPERTIES
+   IMPORTED_LINK_INTERFACE_LANGUAGES "C"
+-  INTERFACE_INCLUDE_DIRECTORIES     "@CMAKE_INSTALL_PREFIX@/include" )
++  INTERFACE_INCLUDE_DIRECTORIES     "${_GSL_PREFIX}/include" )
+ 
+ #
+ # cleanup
+ #
+ 
++unset(_GSL_PREFIX)
+ unset(_SELF_DIR)

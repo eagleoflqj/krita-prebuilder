@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+sdk_root=${EMSDK_ROOT:-${EMSDK:-}}
+if [[ -z "$sdk_root" ]]; then
+    compiler=$(command -v emcc || true)
+    if [[ -z "$compiler" ]]; then
+        echo "Emscripten not found. Load your configured SDK environment so emcc is on PATH." >&2
+        exit 1
+    fi
+    sdk_root=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().parents[2])' "$compiler")
+fi
+if [[ ! -f "$sdk_root/.emscripten" ]]; then
+    echo "Missing emsdk configuration: $sdk_root/.emscripten" >&2
+    exit 1
+fi
+sdk_root=$(cd -- "$sdk_root" && pwd)
+expected=$(cat "$project_root/.emscripten-version")
+actual=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])))' "$sdk_root/upstream/emscripten/emscripten-version.txt")
+if [[ "$actual" != "$expected" ]]; then
+    echo "Emscripten version mismatch: expected $expected, found $actual. Shared SDK was not changed." >&2
+    exit 1
+fi
+export EM_CONFIG="$sdk_root/.emscripten"
+export EMSDK="$sdk_root"
+target_prefix="$project_root/build/install-jspi/target"
+export EM_CACHE="$project_root/build/compiler-cache/emscripten-$expected-jspi"
+export EM_PORTS="$EM_CACHE/ports"
+export TMPDIR="$project_root/build/tmp"
+export EMCC_TEMP_DIR="$TMPDIR"
+export PKG_CONFIG_PATH="$target_prefix/lib/pkgconfig:$target_prefix/share/pkgconfig"
+export PATH="$sdk_root/upstream/emscripten:$sdk_root/upstream/bin:$PATH"
+mkdir -p -- "$EM_CACHE" "$TMPDIR"
+if [[ $# == 0 ]]; then
+    echo "Usage: scripts/with-emsdk COMMAND [ARG ...]" >&2
+    exit 2
+fi
+exec "$@"

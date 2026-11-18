@@ -1,0 +1,4 @@
+# PoC only; move this series to the external SDK repository before release.
+0001-cmake-handle-emsdk-CFGDIR-paths.patch
+0002-qsimd-include-stdlib-for-getenv.patch
+0003-wasm-handle-nested-native-event-dispatch.patch

@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Static Qt and KDE SDK smoke</title>
+<div id="status">Loading SDK smoke…</div>
+<div id="screen" style="height: 400px"></div>
+<script src="sdk-i18n.js"></script>
+<script src="qtloader.js"></script>
+<script>
+const reportFailure = error => fetch('/__probe_result?status=' + encodeURIComponent('FAIL: ' + String(error)));
+const logMessage = message => fetch('/__probe_log?message=' + encodeURIComponent(String(message)));
+window.addEventListener('error', event => reportFailure(event.message));
+window.addEventListener('unhandledrejection', event => reportFailure(event.reason));
+qtLoad({print: logMessage, printErr: logMessage, onAbort: reason => logMessage(new Error(String(reason)).stack),
+  qt: {entryFunction: window.sdk_i18n_entry, containerElements: [document.getElementById('screen')],
+       onExit: exit => reportFailure(JSON.stringify(exit))}})
+  .catch(error => { document.getElementById('status').textContent = String(error); reportFailure(error); });
+</script>

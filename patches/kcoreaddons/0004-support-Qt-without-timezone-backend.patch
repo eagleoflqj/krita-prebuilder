@@ -1,0 +1,39 @@
+From: krita-wasm-sdk contributors
+Subject: [PATCH] format: support Qt builds without a timezone backend
+
+Compare UTC offsets without requiring named-zone APIs, and use Qt's
+lightweight abbreviation when the full timezone backend is disabled.
+Native builds with timezone support retain localized zone display names.
+
+Applies to: KCoreAddons 6.24.0
+Upstream status: local portability patch, not submitted
+
+diff --git a/src/lib/util/kformatprivate.cpp b/src/lib/util/kformatprivate.cpp
+--- a/src/lib/util/kformatprivate.cpp
++++ b/src/lib/util/kformatprivate.cpp
+@@ -655,7 +655,7 @@
+     if (dt.timeSpec() == Qt::LocalTime) {
+         return false;
+     }
+-    return dt.timeZone().offsetFromUtc(dt) != QTimeZone::systemTimeZone().offsetFromUtc(dt);
++    return dt.offsetFromUtc() != dt.toLocalTime().offsetFromUtc();
+ }
+ 
+ QString KFormatPrivate::formatTime(const QDateTime &dateTime, QLocale::FormatType format, KFormat::TimeFormatOptions options) const
+@@ -667,12 +667,16 @@
+     }
+ 
+     QString tzAbbr;
++#if QT_CONFIG(timezone)
+     const auto tz = dateTime.timeZone();
+     if (tz.hasDaylightTime()) {
+         tzAbbr = tz.displayName(tz.isDaylightTime(dateTime) ? QTimeZone::DaylightTime : QTimeZone::StandardTime, QTimeZone::ShortName, m_locale);
+     } else {
+         tzAbbr = tz.displayName(QTimeZone::GenericTime, QTimeZone::ShortName, m_locale);
+     }
++#else
++    tzAbbr = dateTime.timeZoneAbbreviation();
++#endif
+     if (tzAbbr.isEmpty()) {
+         return output;
+     }

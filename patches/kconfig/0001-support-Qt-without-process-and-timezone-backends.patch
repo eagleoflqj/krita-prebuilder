@@ -2,7 +2,9 @@ From: krita-wasm-sdk contributors
 Subject: [PATCH] config: support Qt without process or timezone backends
 
 Skip the process-based update tool when QProcess is disabled and report
-pending external updates explicitly. Preserve UTC/fixed-offset datetime
+pending external updates explicitly. Check the Qt feature when defining the
+update executable path: the update target is created after the core library.
+Preserve UTC/fixed-offset datetime
 serialization; reject unsupported named zones with a warning/default
 rather than interpreting them as local time.
 
@@ -34,7 +36,7 @@ diff --git a/src/core/CMakeLists.txt b/src/core/CMakeLists.txt
 -    PRIVATE
 -        KCONF_UPDATE_INSTALL_LOCATION="${KDE_INSTALL_FULL_LIBEXECDIR_KF}/$<TARGET_FILE_NAME:KF6::kconf_update>"
 -)
-+if(TARGET KF6::kconf_update)
++if(QT_FEATURE_process)
 +    target_compile_definitions(KF6ConfigCore
 +        PRIVATE
 +            KCONF_UPDATE_INSTALL_LOCATION="${KDE_INSTALL_FULL_LIBEXECDIR_KF}/$<TARGET_FILE_NAME:KF6::kconf_update>"

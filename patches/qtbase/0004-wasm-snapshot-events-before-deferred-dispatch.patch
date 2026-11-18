@@ -1,0 +1,39 @@
+Snapshot browser events before deferred dispatch.
+
+Adapted from Qt commit e2ac21456a906684b4edc588412038c4fc4b69e4
+by Morten Sørvig <morten.sorvig@qt.io>:
+https://github.com/qt/qtbase/commit/e2ac21456a906684b4edc588412038c4fc4b69e4
+
+Qt 6.10 also reads composedPath() in its deferred platform handler, so
+preserve that transient value as well. Non-Event timer arguments pass through.
+The upstream source file retains its original copyright and license notices.
+
+diff --git a/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp b/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp
+--- a/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp
++++ b/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp
+@@ -65,9 +65,25 @@
+ // The wasm instance will then call the C++ event after it is resumed.
+ void qtRegisterEventHandlerJs(int index) {
+     EM_ASM({
++        // Browsers clear transient event state when dispatch returns. Keep
++        // the values needed by handlers that run after a JSPI suspension.
++        function snapshotEvent(event) {
++            if (!(event instanceof Event))
++                return event;
++            const path = event.composedPath();
++            const copy = {};
++            for (const key in event) {
++                const value = event[key];
++                copy[key] = typeof value === 'function' ? value.bind(event) : value;
++            }
++            copy.composedPath = () => path;
++            return copy;
++        }
++
+         let index = $0;
+         let control = Module.qtSuspendResumeControl;
+         let handler = (arg) => {
++            arg = snapshotEvent(arg);
+ 
+             // Add event to event queue
+             control.pendingEvents.push({

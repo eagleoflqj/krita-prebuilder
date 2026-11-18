@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+sdk_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+prefix="$sdk_root/build/install-jspi"
+output="$sdk_root/build/jspi/sdk-smoke"
+"$sdk_root/scripts/with-emsdk" "$prefix/target/bin/qt-cmake" \
+    -S "$sdk_root/tests/smoke" -B "$output" -G Ninja \
+    "-DQT_HOST_PATH=$prefix/host" "-DQT_HOST_PATH_CMAKE_DIR=$prefix/host/lib/cmake" \
+    "-DKF6_HOST_TOOLING=$prefix/host/lib/cmake" "-DCMAKE_PREFIX_PATH=$prefix/target" "-DCMAKE_FIND_ROOT_PATH=$prefix/target"
+"$sdk_root/scripts/with-emsdk" cmake --build "$output" --parallel 4
+cp -- "$sdk_root/tests/smoke/index.html" "$output/index.html"

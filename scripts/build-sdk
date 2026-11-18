@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+export SDK_BUILD_JOBS=${SDK_BUILD_JOBS:-4}
+"$project_root/scripts/build-jspi-host"
+"$project_root/scripts/build-jspi"
+python3 "$project_root/scripts/check-target.py"
+"$project_root/scripts/warm-cache"
+"$project_root/scripts/build-dependency-probe"

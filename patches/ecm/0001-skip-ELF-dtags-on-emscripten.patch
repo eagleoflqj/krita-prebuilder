@@ -1,0 +1,22 @@
+From: krita-wasm-sdk contributors
+Subject: [PATCH] compiler settings: do not pass ELF dtags to wasm-ld
+
+Emscripten is UNIX in CMake, but wasm-ld does not accept
+--enable-new-dtags. The option also breaks every subsequent try_compile
+and produces false-negative feature checks.
+
+Applies to: ECM 6.24.0
+Upstream status: local Wasm porting patch, not submitted
+
+diff --git a/kde-modules/KDECompilerSettings.cmake b/kde-modules/KDECompilerSettings.cmake
+--- a/kde-modules/KDECompilerSettings.cmake
++++ b/kde-modules/KDECompilerSettings.cmake
+@@ -442,7 +442,7 @@
+     cmake_policy(SET CMP0063 NEW)
+ endif()
+ 
+-if (UNIX AND NOT APPLE AND NOT CYGWIN)
++if (UNIX AND NOT APPLE AND NOT CYGWIN AND NOT EMSCRIPTEN)
+     # Enable adding DT_RUNPATH, which means that LD_LIBRARY_PATH takes precedence
+     # over the built-in rPath
+     set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--enable-new-dtags ${CMAKE_SHARED_LINKER_FLAGS}")

@@ -1,0 +1,132 @@
+From: krita-wasm-sdk contributors
+Subject: [PATCH] config: support Qt without process or timezone backends
+
+Skip the process-based update tool when QProcess is disabled and report
+pending external updates explicitly. Check the Qt feature when defining the
+update executable path: the update target is created after the core library.
+Preserve UTC/fixed-offset datetime
+serialization; reject unsupported named zones with a warning/default
+rather than interpreting them as local time.
+
+Applies to: KConfig 6.24.0
+Upstream status: local Wasm porting patch, not submitted
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -6,7 +6,9 @@
+     add_subdirectory(qml)
+ endif()
+ add_subdirectory(kconfig_compiler)
+-add_subdirectory(kconf_update)
++if(QT_FEATURE_process)
++    add_subdirectory(kconf_update)
++endif()
+ add_subdirectory(kreadconfig)
+ 
+ ecm_qt_install_logging_categories(
+diff --git a/src/core/CMakeLists.txt b/src/core/CMakeLists.txt
+--- a/src/core/CMakeLists.txt
++++ b/src/core/CMakeLists.txt
+@@ -50,10 +50,12 @@
+     EXCLUDE_DEPRECATED_BEFORE_AND_AT ${EXCLUDE_DEPRECATED_BEFORE_AND_AT}
+ )
+ 
+-target_compile_definitions(KF6ConfigCore
+-    PRIVATE
+-        KCONF_UPDATE_INSTALL_LOCATION="${KDE_INSTALL_FULL_LIBEXECDIR_KF}/$<TARGET_FILE_NAME:KF6::kconf_update>"
+-)
++if(QT_FEATURE_process)
++    target_compile_definitions(KF6ConfigCore
++        PRIVATE
++            KCONF_UPDATE_INSTALL_LOCATION="${KDE_INSTALL_FULL_LIBEXECDIR_KF}/$<TARGET_FILE_NAME:KF6::kconf_update>"
++    )
++endif()
+ 
+ target_include_directories(KF6ConfigCore
+     INTERFACE "$<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR_KF}/KConfig;${KDE_INSTALL_INCLUDEDIR_KF}/KConfigCore>"
+diff --git a/src/core/kconfig.cpp b/src/core/kconfig.cpp
+--- a/src/core/kconfig.cpp
++++ b/src/core/kconfig.cpp
+@@ -557,8 +557,12 @@
+     const QString cfg_id = updateFile + QLatin1Char(':') + id;
+     const QStringList ids = cg.readEntry("update_info", QStringList());
+     if (!ids.contains(cfg_id)) {
++#if QT_CONFIG(process)
+         QProcess::execute(QStringLiteral(KCONF_UPDATE_INSTALL_LOCATION), QStringList{QStringLiteral("--check"), updateFile});
+         reparseConfiguration();
++#else
++        qCWarning(KCONFIG_CORE_LOG) << "External configuration updates are not supported on this platform:" << updateFile;
++#endif
+     }
+ }
+ 
+@@ -991,10 +995,14 @@
+ 
+         // Note: We don't ask the user if we should not ask this question again because we can't save the answer.
+         errorMsg += QCoreApplication::translate("KConfig", "Please contact your system administrator.");
++#if QT_CONFIG(process)
+         QString cmdToExec = QStandardPaths::findExecutable(QStringLiteral("kdialog"));
+         if (!cmdToExec.isEmpty()) {
+             QProcess::execute(cmdToExec, QStringList{QStringLiteral("--title"), QCoreApplication::applicationName(), QStringLiteral("--msgbox"), errorMsg});
+         }
++#else
++        qCWarning(KCONFIG_CORE_LOG) << errorMsg;
++#endif
+     }
+ 
+     d->configState = allWritable ? ReadWrite : ReadOnly; // update the read/write status
+diff --git a/src/core/kconfiggroup.cpp b/src/core/kconfiggroup.cpp
+--- a/src/core/kconfiggroup.cpp
++++ b/src/core/kconfiggroup.cpp
+@@ -357,7 +357,26 @@
+         QDateTime dt(date, time);
+         if (list.count() == 7) { // Then the timezone, which was added later
+             const auto id = value.mid(value.lastIndexOf(',') + 1);
++#if QT_CONFIG(timezone)
+             dt.setTimeZone(QTimeZone(id));
++#else
++            if (id == "UTC") {
++                dt.setTimeZone(QTimeZone::UTC);
++            } else if (id.startsWith("UTC+") || id.startsWith("UTC-")) {
++                const QString offsetText = QString::fromLatin1(id.mid(4));
++                const QTime offsetTime = QTime::fromString(offsetText, offsetText.size() == 8 ? QStringLiteral("HH:mm:ss") : QStringLiteral("HH:mm"));
++                const int seconds = QTime(0, 0).secsTo(offsetTime) * (id.at(3) == '-' ? -1 : 1);
++                const QTimeZone zone = QTimeZone::fromSecondsAheadOfUtc(seconds);
++                if (!offsetTime.isValid() || !zone.isValid()) {
++                    qCWarning(KCONFIG_CORE_LOG) << "Invalid UTC offset in configuration:" << id;
++                    return aDefault;
++                }
++                dt.setTimeZone(zone);
++            } else {
++                qCWarning(KCONFIG_CORE_LOG) << "Named timezones are unavailable in this Qt build:" << id;
++                return aDefault;
++            }
++#endif
+         }
+         if (!dt.isValid()) {
+             qCWarning(KCONFIG_CORE_LOG) << errString(pKey, value, aDefault);
+@@ -1006,7 +1025,23 @@
+             time.second() + time.msec() / 1000.0,
+         };
+         if (rDateTime.timeRepresentation().timeSpec() != Qt::LocalTime) {
++#if QT_CONFIG(timezone)
+             list.append(rDateTime.timeZone().id());
++#else
++            const int offset = rDateTime.offsetFromUtc();
++            QString zone = QStringLiteral("UTC");
++            if (offset) {
++                const int magnitude = qAbs(offset);
++                zone += QStringLiteral("%1%2:%3")
++                    .arg(offset < 0 ? QLatin1Char('-') : QLatin1Char('+'))
++                    .arg(magnitude / 3600, 2, 10, QLatin1Char('0'))
++                    .arg((magnitude % 3600) / 60, 2, 10, QLatin1Char('0'));
++                if (magnitude % 60) {
++                    zone += QStringLiteral(":%1").arg(magnitude % 60, 2, 10, QLatin1Char('0'));
++                }
++            }
++            list.append(zone);
++#endif
+         }
+ 
+         writeEntry(key, list, flags);

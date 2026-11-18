@@ -1,0 +1,36 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -105,28 +105,10 @@
+ endif()
+ if(NOT QUAZIP_QT_ZLIB_USED)
+ 
+-    if(EMSCRIPTEN)
+-      if(NOT DEFINED ZLIB_LIBRARY)
+-        message(WARNING "ZLIB_LIBRARY is not set")
+-      endif()
+-
+-      if(NOT DEFINED ZLIB_INCLUDE)
+-        message(WARNING "ZLIB_INCLUDE is not set")
+-      else()
+-        include_directories(${ZLIB_INCLUDE})
+-      endif()
+-
+-      if(NOT DEFINED ZCONF_INCLUDE)
+-        message(WARNING "ZCONF_INCLUDE is not set")
+-      else()
+-        include_directories(${ZCONF_INCLUDE})
+-      endif()
+-
+-      set(QUAZIP_LIB_LIBRARIES ${QUAZIP_LIB_LIBRARIES} ${ZLIB_LIBRARY})
+-    else()
+-      find_package(ZLIB REQUIRED)
+-      set(QUAZIP_LIB_LIBRARIES ${QUAZIP_LIB_LIBRARIES} ZLIB::ZLIB)
+-    endif()  
++    # Export a relocatable imported dependency on every platform. Absolute
++    # ZLIB_LIBRARY paths refer to the SDK build host after installation.
++    find_package(ZLIB REQUIRED)
++    set(QUAZIP_LIB_LIBRARIES ${QUAZIP_LIB_LIBRARIES} ZLIB::ZLIB)
+ endif()
+ 
+ set(QUAZIP_DEP)

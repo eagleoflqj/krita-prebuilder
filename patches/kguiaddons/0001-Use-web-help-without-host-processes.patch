@@ -1,0 +1,32 @@
+Subject: [PATCH] Fall back to web help without host process APIs
+
+--- a/src/util/kurlhandler_p.cpp
++++ b/src/util/kurlhandler_p.cpp
+@@ -12,7 +12,9 @@
+ #include <QDebug>
+ #include <QDesktopServices>
+ #include <QLocale>
++#if QT_CONFIG(process)
+ #include <QProcess>
++#endif
+ #include <QStandardPaths>
+ #include <QUrl>
+ 
+@@ -20,6 +22,7 @@
+ 
+ static bool openWithKHelpCenter(const QUrl &url)
+ {
++#if QT_CONFIG(process)
+     const QString helpcenter = QStandardPaths::findExecutable(QString::fromLatin1(s_khelpcenter_exec));
+     if (!helpcenter.isEmpty()) {
+         QUrl u(url);
+@@ -32,6 +35,9 @@
+         return true;
+     }
+ 
++#else
++    Q_UNUSED(url)
++#endif
+     return false;
+ }
+ 

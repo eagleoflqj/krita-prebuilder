@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+default_prefix="$project_root/build/install-jspi"
+default_build="$project_root/build/jspi/sdk-deps"
+sdk_prefix=${KRITA_SDK_DIR:-"$default_prefix"}
+probe_build=${SDK_PROBE_BUILD_DIR:-"$default_build"}
+"$project_root/scripts/with-emsdk" "$sdk_prefix/target/bin/qt-cmake" \
+    -S "$project_root/tests/smoke-deps" -B "$probe_build" -G Ninja \
+    '-U__pkg_config_checked_Dependencies' \
+    "-DQT_HOST_PATH=$sdk_prefix/host" "-DQT_HOST_PATH_CMAKE_DIR=$sdk_prefix/host/lib/cmake" \
+    "-DKF6_HOST_TOOLING=$sdk_prefix/host/lib/cmake" \
+    "-DECM_DIR=$sdk_prefix/common/share/ECM/cmake" \
+    "-DCMAKE_PREFIX_PATH=$sdk_prefix/target;$sdk_prefix/common" "-DCMAKE_FIND_ROOT_PATH=$sdk_prefix/target" "-DSDK_TARGET=$sdk_prefix/target"
+"$project_root/scripts/with-emsdk" cmake --build "$probe_build" --parallel 4
+python3 - "$project_root/tests/smoke/index.html" "$probe_build/index.html" <<'PY'
+from pathlib import Path
+import sys
+Path(sys.argv[2]).write_text(Path(sys.argv[1]).read_text().replace('sdk-smoke', 'sdk-deps').replace('sdk_smoke_entry', 'sdk_deps_entry'))
+PY

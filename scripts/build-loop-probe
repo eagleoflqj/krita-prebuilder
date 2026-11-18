@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+source_dir=${1:-"$root/tests/smoke-event-loops"}
+target="$root/build/install-jspi/target"
+host="$root/build/install/host"
+output="$root/build/jspi/event-loop-probe-sdk"
+if [[ ! -x "$target/bin/qt-cmake" ]]; then
+    echo "Build the Qt target first: $target" >&2
+    exit 1
+fi
+"$root/scripts/with-emsdk" "$target/bin/qt-cmake" \
+    -S "$source_dir" -B "$output" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    "-DQT_HOST_PATH=$host" "-DQT_HOST_PATH_CMAKE_DIR=$host/lib/cmake" \
+    "-DCMAKE_PREFIX_PATH=$target" "-DCMAKE_FIND_ROOT_PATH=$target"
+"$root/scripts/with-emsdk" cmake --build "$output" --parallel 4
+cp -- "$source_dir/index.html" "$output/index.html"
+echo "Built $output; run scripts/test-browser-probe.py with --expect LOOP_PROBE_OK."

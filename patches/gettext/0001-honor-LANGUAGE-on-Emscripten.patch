@@ -1,0 +1,25 @@
+Subject: Honor explicit LANGUAGE on Emscripten LC_MESSAGES stub
+
+--- a/gettext-runtime/intl/dcigettext.c
++++ b/gettext-runtime/intl/dcigettext.c
+@@ -1627,6 +1627,20 @@
+ 	by POSIX and should not depend on environment variables like
+ 	"LANGUAGE" or system-dependent information.  We allow such programs
+         to use gettext().  */
++#ifdef __EMSCRIPTEN__
++  /* Emscripten reports C for LC_MESSAGES even when LANGUAGE is selected.
++     KI18n requests UTF-8 explicitly and serializes LANGUAGE changes. Honor
++     that selection, while retaining an explicit POSIX/C override. */
++  const char *override = getenv ("LC_ALL");
++  if (override && (strcmp (override, "C") == 0 || strcmp (override, "POSIX") == 0))
++    return "C";
++  if (strcmp (locale, "C") == 0)
++    {
++      language = getenv ("LANGUAGE");
++      if (language && language[0])
++        return language;
++    }
++#endif
+   if (strcmp (locale, "C") == 0)
+     return locale;
+ 

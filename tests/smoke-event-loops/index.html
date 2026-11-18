@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Krita static Qt Wasm probe</title>
+<style>
+  html, body { height: 100%; margin: 0; font: 16px sans-serif; }
+  body { display: flex; flex-direction: column; }
+  #status { padding: 12px; }
+  #screen { flex: 1; position: relative; overflow: hidden; }
+</style>
+<div id="status">Preparing browser isolation…</div>
+<div id="screen"></div>
+<script src="loop-probe.js"></script>
+<script src="qtloader.js"></script>
+<script type="module">
+globalThis.loopHeartbeat = 0;
+setInterval(() => globalThis.loopHeartbeat++, 10);
+const status = document.getElementById('status');
+const testing = new URLSearchParams(location.search).has('test');
+const reportFailure = error => {
+  if (testing) fetch('/__probe_result?status=' + encodeURIComponent('FAIL: ' + String(error)));
+};
+const logMessage = message => {
+  if (testing) fetch('/__probe_log?message=' + encodeURIComponent(String(message)));
+};
+window.addEventListener('error', event => reportFailure(event.message));
+window.addEventListener('unhandledrejection', event => reportFailure(event.reason));
+try {
+  if (!globalThis.crossOriginIsolated) throw new Error('Probe server must provide cross-origin isolation');
+  status.textContent = 'Loading static Qt and starting the probe…';
+  await qtLoad({
+    print: logMessage,
+    printErr: logMessage,
+    qt: {
+      entryFunction: globalThis.kritaLoopProbe,
+      containerElements: [document.getElementById('screen')],
+      onLoaded: () => {
+        if (!document.title.endsWith('_PROBE_OK'))
+          status.textContent = 'Static Qt loaded; running plugin, thread and paint checks…';
+      },
+      onExit: exit => { status.textContent = `Application exited: ${JSON.stringify(exit)}`; reportFailure(JSON.stringify(exit)); }
+    }
+  });
+} catch (error) {
+  status.textContent = `FAILED: ${error.message}`;
+  reportFailure(error);
+}
+</script>
+</html>

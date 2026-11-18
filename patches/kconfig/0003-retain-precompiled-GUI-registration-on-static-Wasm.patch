@@ -1,0 +1,30 @@
+Subject: [PATCH] Retain precompiled ConfigGui registration on static Wasm
+
+The GUI conversion registration and its constructor are already compiled
+into KF6ConfigGui. Force that object into the final Wasm link instead of
+exporting a C++ source file for every SDK consumer to compile.
+
+diff --git a/src/gui/CMakeLists.txt b/src/gui/CMakeLists.txt
+--- a/src/gui/CMakeLists.txt
++++ b/src/gui/CMakeLists.txt
+@@ -64,10 +64,16 @@
+ ecm_generate_qdoc(KF6ConfigGui kconfiggui.qdocconf)
+ 
+ if(NOT BUILD_SHARED_LIBS)
+-    target_sources(KF6ConfigGui PUBLIC
+-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/kconfigguistaticinitializer.cpp>
+-        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR_KF}/KConfigGui/kconfigguistaticinitializer.cpp>
+-    )
++    if(EMSCRIPTEN)
++        # This object already has Q_CONSTRUCTOR_FUNCTION registration. Keep it
++        # in the final link without asking consumers to compile external code.
++        target_link_options(KF6ConfigGui INTERFACE "LINKER:--undefined=_Z19initKConfigGroupGuiv")
++    else()
++        target_sources(KF6ConfigGui PUBLIC
++            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/kconfigguistaticinitializer.cpp>
++            $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR_KF}/KConfigGui/kconfigguistaticinitializer.cpp>
++        )
++    endif()
+ endif()
+ 
+ install(TARGETS KF6ConfigGui EXPORT KF6ConfigTargets ${KF_INSTALL_TARGETS_DEFAULT_ARGS})

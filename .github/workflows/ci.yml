@@ -1,0 +1,162 @@
+name: Build dependency SDK
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check C and C++ formatting
+        run: scripts/format.sh --check
+
+      - name: Setup Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+
+      - name: Check Python scripts
+        run: |
+          python -m pip install --cache-dir cache/pip -r requirements.txt
+          ruff format --check scripts
+          ruff check scripts
+          mypy
+
+      - name: Get emscripten version
+        run: |
+          echo "EMSCRIPTEN_VERSION=$(cat .emscripten-version)" >> "$GITHUB_ENV"
+
+      - name: Setup emsdk
+        uses: emscripten-core/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984 # v16
+        with:
+          version: ${{ env.EMSCRIPTEN_VERSION }}
+
+      - name: Record build environment
+        run: |
+          python3 --version
+          cmake --version
+          ninja --version
+          c++ --version
+          ldd --version
+
+      - name: Install build utilities
+        run: sudo apt update && sudo apt install -y gperf gettext
+
+      - name: Build host tools, JSPI dependencies and probes
+        run: |
+          scripts/build-jspi-host
+          scripts/build-jspi
+          scripts/warm-cache
+          scripts/build-dependency-probe
+          scripts/build-loop-probe
+
+      - name: Build internationalization supplement and probe
+        run: |
+          scripts/i18n.py build
+          scripts/i18n.py catalogs --catalogs build/i18n/catalogs-a
+          scripts/build-i18n-probe
+          scripts/i18n.py package --catalogs build/i18n/catalogs-a --tag ci
+
+      - name: Package SDK and corresponding source
+        run: scripts/package.py --profile dependencies
+
+      - name: Build and package QtCore correction
+        run: |
+          mkdir -p build/qtcore-ci-base
+          tar -xzf cache/prebuilt/krita-wasm-sdk-stage4-jspi.tar.gz -C build/qtcore-ci-base
+          python3 scripts/qtcore-correction.py --base-sdk build/qtcore-ci-base --output cache/prebuilt/qtcore-correction
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sdk-dependencies-${{ github.sha }}
+          path: cache/prebuilt/
+          if-no-files-found: error
+
+      - name: Verify target archives and metadata
+        run: scripts/check-target.py
+
+      - name: Verify catalog reproducibility
+        run: |
+          scripts/i18n.py catalogs --catalogs build/i18n/catalogs-b
+          scripts/i18n.py compare --catalogs build/i18n/catalogs-a --compare build/i18n/catalogs-b
+
+      - name: Verify repeated packaging matches uploaded artifacts
+        run: |
+          scripts/package.py --profile dependencies --output-dir build/package-repeat/sdk --check-repeat
+          cmp cache/prebuilt/krita-wasm-sdk-stage4-jspi.tar.gz build/package-repeat/sdk/krita-wasm-sdk-stage4-jspi.tar.gz
+          cmp cache/prebuilt/krita-wasm-sdk-stage4-jspi-sources.tar.gz build/package-repeat/sdk/krita-wasm-sdk-stage4-jspi-sources.tar.gz
+          scripts/i18n.py package --catalogs build/i18n/catalogs-a --tag ci --output build/package-repeat/i18n --check-repeat
+          cmp cache/prebuilt/krita-wasm-i18n-ci.tar.gz build/package-repeat/i18n/krita-wasm-i18n-ci.tar.gz
+          cmp cache/prebuilt/krita-wasm-i18n-ci-sources.tar.gz build/package-repeat/i18n/krita-wasm-i18n-ci-sources.tar.gz
+
+      - name: Verify packaged SDK relocation
+        run: |
+          mv build/install-jspi/target build/install-jspi/target-original
+          trap 'mv build/install-jspi/target-original build/install-jspi/target' EXIT
+          KRITA_SDK_DIR="$PWD/build/qtcore-ci-base" \
+            SDK_PROBE_BUILD_DIR="$PWD/build/relocated-sdk-probe" \
+            scripts/build-dependency-probe
+          scripts/test-browser-probe.py build/relocated-sdk-probe --expect SDK_DEPS_OK
+
+      - name: Verify SDK probes in Firefox
+        run: |
+          scripts/test-browser-probe.py build/jspi/sdk-smoke --expect SDK_SMOKE_OK
+          scripts/test-browser-probe.py build/jspi/sdk-deps --expect SDK_DEPS_OK
+          scripts/test-browser-probe.py build/jspi/event-loop-probe-sdk --expect LOOP_PROBE_OK
+          scripts/test-browser-probe.py build/jspi/sdk-i18n --expect SDK_I18N_OK
+
+      - name: Verify gettext runtime in Node
+        working-directory: build/jspi/sdk-i18n
+        run: |
+          node gettext.js
+          node gettext.js C
+          node gettext.js POSIX
+
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sdk-dependencies-${{ github.sha }}
+          path: cache/prebuilt
+
+      - name: Publish nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mapfile -d '' assets < <(find cache/prebuilt -type f -print0 | sort -z)
+          test "${#assets[@]}" -gt 0
+          ref=$(gh api "repos/$GH_REPO/git/matching-refs/tags/latest" \
+            --jq '.[] | select(.ref == "refs/tags/latest") | .ref')
+          if [[ -n "$ref" ]]; then
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/latest" \
+              -f "sha=$GITHUB_SHA" -F force=true
+          else
+            gh api --method POST "repos/$GH_REPO/git/refs" \
+              -f ref=refs/tags/latest -f "sha=$GITHUB_SHA"
+          fi
+          if gh release view latest > /dev/null 2>&1; then
+            gh release upload latest "${assets[@]}" --clobber
+            gh release edit latest --prerelease --latest=false --draft=false \
+              --title 'Nightly build' --notes "Built from $GITHUB_SHA."
+          else
+            gh release create latest "${assets[@]}" --verify-tag --prerelease --latest=false \
+              --title 'Nightly build' --notes "Built from $GITHUB_SHA."
+          fi

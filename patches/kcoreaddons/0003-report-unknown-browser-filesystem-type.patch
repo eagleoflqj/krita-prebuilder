@@ -1,0 +1,22 @@
+From: krita-wasm-sdk contributors
+Subject: [PATCH] filesystem: use the unknown-type fallback for WebAssembly
+
+Browser virtual filesystems do not expose the host filesystem type.
+Reuse the existing Unknown result rather than selecting an undefined
+Unix statfs implementation or claiming a desktop filesystem type.
+
+Applies to: KCoreAddons 6.24.0
+Upstream status: local Wasm porting patch, not submitted
+
+diff --git a/src/lib/io/kfilesystemtype.cpp b/src/lib/io/kfilesystemtype.cpp
+--- a/src/lib/io/kfilesystemtype.cpp
++++ b/src/lib/io/kfilesystemtype.cpp
+@@ -22,7 +22,7 @@
+     const char *name = nullptr;
+ };
+ 
+-#ifndef Q_OS_WIN
++#if !defined(Q_OS_WIN) && !defined(Q_OS_WASM)
+ // clang-format off
+ static constexpr FsInfo s_fsMap[] = {
+     {KFileSystemType::Nfs, "nfs"},

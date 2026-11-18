@@ -1,0 +1,48 @@
+From: krita-wasm-sdk contributors
+Subject: [PATCH] build: keep KConfig command-line tools in the host prefix
+
+The browser target only needs the libraries. Its consumers use native
+KConfigCompilerTargets from KF6_HOST_TOOLING, built separately; do not
+link unusable browser copies of the compiler or shell command utilities.
+Native and other cross targets keep their existing behavior.
+
+Applies to: KConfig 6.24.0
+Upstream status: local Wasm porting patch, not submitted
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -5,11 +5,13 @@
+ if(KCONFIG_USE_QML)
+     add_subdirectory(qml)
+ endif()
+-add_subdirectory(kconfig_compiler)
+-if(QT_FEATURE_process)
+-    add_subdirectory(kconf_update)
++if(NOT EMSCRIPTEN)
++    add_subdirectory(kconfig_compiler)
++    if(QT_FEATURE_process)
++        add_subdirectory(kconf_update)
++    endif()
++    add_subdirectory(kreadconfig)
+ endif()
+-add_subdirectory(kreadconfig)
+ 
+ ecm_qt_install_logging_categories(
+     EXPORT KCONFIG
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -96,8 +96,10 @@
+         FILE KF6ConfigTargets.cmake NAMESPACE KF6:: COMPONENT Devel)
+ 
+ 
+-install(EXPORT KF6ConfigCompilerTargets DESTINATION "${KDE_INSTALL_CMAKEPACKAGEDIR}/KF6Config"
+-        FILE KF6ConfigCompilerTargets.cmake NAMESPACE KF6:: COMPONENT Devel)
++if(NOT EMSCRIPTEN)
++    install(EXPORT KF6ConfigCompilerTargets DESTINATION "${KDE_INSTALL_CMAKEPACKAGEDIR}/KF6Config"
++            FILE KF6ConfigCompilerTargets.cmake NAMESPACE KF6:: COMPONENT Devel)
++endif()
+ 
+ install(FILES ${kconfig_version_header}
+         DESTINATION ${KDE_INSTALL_INCLUDEDIR_KF}/KConfig COMPONENT Devel)

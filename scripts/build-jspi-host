@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-mkdir -p "$root/build/logs"
 python3 - "$root" <<'PY'
 import json, subprocess, sys
 from pathlib import Path
@@ -10,9 +9,5 @@ for name in json.loads((root/'sources.json').read_text())['packages']:
     subprocess.run([root/'scripts/sdk.py','fetch',name],check=True)
 PY
 for component in qtbase-host qttools-host qtshadertools-host qtdeclarative-host ecm kcoreaddons-host kconfig-host; do
-    "$root/scripts/sdk.py" build "$component" --jobs "${SDK_BUILD_JOBS:-6}" \
-        > "$root/build/logs/jspi-host-$component.log" 2>&1 || {
-            tail -n 80 "$root/build/logs/jspi-host-$component.log"
-            exit 1
-        }
+    "$root/scripts/sdk.py" build "$component" --jobs "${SDK_BUILD_JOBS:-6}"
 done

@@ -23,14 +23,27 @@ if [[ "$actual" != "$expected" ]]; then
 fi
 export EM_CONFIG="$sdk_root/.emscripten"
 export EMSDK="$sdk_root"
-target_prefix="$project_root/build/install-jspi/target"
-export EM_CACHE="$project_root/build/compiler-cache/emscripten-$expected-jspi"
+sdk_prefix=${KRITA_SDK_DIR:-"$project_root/build/install-jspi"}
+if [[ -n "${KRITA_SDK_DIR:-}" ]]; then
+    sdk_prefix=$(cd -- "$sdk_prefix" && pwd)
+    export EM_CACHE="$sdk_prefix/emscripten-cache"
+    export EM_FROZEN_CACHE=1
+    if [[ ! -d "$EM_CACHE/sysroot" ]]; then
+        echo "Missing prebuilt Emscripten sysroot: $EM_CACHE" >&2
+        exit 1
+    fi
+else
+    export EM_CACHE="$project_root/build/compiler-cache/emscripten-$expected-jspi"
+    mkdir -p -- "$EM_CACHE"
+fi
+target_prefix="$sdk_prefix/target"
 export EM_PORTS="$EM_CACHE/ports"
 export TMPDIR="$project_root/build/tmp"
 export EMCC_TEMP_DIR="$TMPDIR"
 export PKG_CONFIG_PATH="$target_prefix/lib/pkgconfig:$target_prefix/share/pkgconfig"
+export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
 export PATH="$sdk_root/upstream/emscripten:$sdk_root/upstream/bin:$PATH"
-mkdir -p -- "$EM_CACHE" "$TMPDIR"
+mkdir -p -- "$TMPDIR"
 if [[ $# == 0 ]]; then
     echo "Usage: scripts/with-emsdk COMMAND [ARG ...]" >&2
     exit 2

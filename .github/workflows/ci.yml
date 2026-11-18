@@ -100,6 +100,15 @@ jobs:
           cmp cache/prebuilt/krita-wasm-i18n-ci.tar.gz build/package-repeat/i18n/krita-wasm-i18n-ci.tar.gz
           cmp cache/prebuilt/krita-wasm-i18n-ci-sources.tar.gz build/package-repeat/i18n/krita-wasm-i18n-ci-sources.tar.gz
 
+      - name: Verify packaged SDK relocation
+        run: |
+          mv build/install-jspi/target build/install-jspi/target-original
+          trap 'mv build/install-jspi/target-original build/install-jspi/target' EXIT
+          KRITA_SDK_DIR="$PWD/build/qtcore-ci-base" \
+            SDK_PROBE_BUILD_DIR="$PWD/build/relocated-sdk-probe" \
+            scripts/build-dependency-probe
+          scripts/test-browser-probe.py build/relocated-sdk-probe --expect SDK_DEPS_OK
+
       - name: Verify SDK probes in Firefox
         run: |
           scripts/test-browser-probe.py build/jspi/sdk-smoke --expect SDK_SMOKE_OK

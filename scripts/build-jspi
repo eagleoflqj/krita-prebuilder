@@ -2,7 +2,6 @@
 # Build Wasm dependencies with JSPI and native exceptions.
 set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-mkdir -p "$root/build/logs"
 mkdir -p "$root/build/install-jspi"
 for name in host common; do
     link="$root/build/install-jspi/$name"
@@ -16,9 +15,5 @@ done
 for component in zlib libpng expat lcms2 freetype-bootstrap harfbuzz freetype fontconfig fribidi libunibreak \
     qtbase-wasm qtsvg qt5compat qtshadertools qtdeclarative kcoreaddons kconfig kcodecs kwidgetsaddons kcompletion \
     ki18n kitemviews kguiaddons kcolorscheme boost eigen xsimd immer zug lager quazip exiv2 gsl; do
-    "$root/scripts/sdk.py" build "$component" --jobs "${SDK_BUILD_JOBS:-6}" \
-        > "$root/build/logs/jspi-$component.log" 2>&1 || {
-            tail -n 80 "$root/build/logs/jspi-$component.log"
-            exit 1
-        }
+    "$root/scripts/sdk.py" build "$component" --jobs "${SDK_BUILD_JOBS:-6}"
 done

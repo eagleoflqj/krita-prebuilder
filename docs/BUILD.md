@@ -6,7 +6,7 @@ Downloaded source archives are stored in `cache/downloads/`. Packaged SDK binari
 
 ## Build the SDK
 
-Run the following commands from the repository root. The host build fetches checksum-locked sources and compiles native tools; the JSPI build compiles the Wasm dependency closure. The host prefix is `build/install/host`, the target prefix is `build/install-jspi/target`, and host/target build logs are in `build/logs` (the last 80 lines are printed on failure). Supplement builds, catalog compilation and browser diagnostics write directly to the terminal and CI log.
+Run the following commands from the repository root. The host build fetches checksum-locked sources and compiles native tools; the JSPI build compiles the Wasm dependency closure. The host prefix is `build/install/host` and the target prefix is `build/install-jspi/target`. Build commands and compiler output stream directly to the terminal and CI log, including host tools, target dependencies, supplements, catalogs and browser diagnostics.
 
 ```sh
 scripts/build-jspi-host
@@ -52,7 +52,7 @@ This copies the base QtCore archive before replacing its corrected object. It ve
 
 ## Verification boundary
 
-CI runs C/C++ formatting and Python checks first. It then builds and packages the SDK, internationalization supplement and QtCore correction, uploads them, and runs archive checks, catalog and packaging comparisons, and runtime probes. Failed verification does not prevent downloading the uploaded artifacts. Repeat packaging uses separate `build/package-repeat/` outputs and compares them with the uploaded archives.
+CI runs C/C++ formatting and Python checks first. It then builds and packages the SDK, internationalization supplement and QtCore correction, uploads them, and runs archive checks, catalog and packaging comparisons, and runtime probes. Failed verification does not prevent downloading the uploaded artifacts. A packaged-SDK probe rebuild temporarily hides the original target prefix and uses the extracted SDK with its compiler cache frozen, then runs the resulting probe in Firefox. Repeat packaging uses separate `build/package-repeat/` outputs and compares them with the uploaded archives.
 
 After all checks pass, pushes to `main` and manual runs on `main` create or update the `latest` tag and the `Nightly build` prerelease. It contains the SDK, internationalization and QtCore correction archives, their corresponding sources and available checksum files. PRs and manual runs on other branches do not publish.
 

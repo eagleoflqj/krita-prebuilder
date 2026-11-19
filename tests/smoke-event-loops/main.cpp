@@ -105,22 +105,31 @@ int main(int argc, char **argv) {
                 "pthreads, C++ exceptions and main-thread suspension coexist");
         require(EM_ASM_INT({ return globalThis.loopHeartbeat > 0;}),
                            "browser event loop remains responsive");
+        // clang-format off
         require(EM_ASM_INT({
             const windowElement = document.getElementById('screen')
                 .querySelector('#qt-shadow-container').shadowRoot.querySelector('.qt-window');
             const event = new PointerEvent('pointerenter', {
-                pointerType: 'mouse', composed: false, cancelable: true, clientX: 5, clientY: 5
+                pointerType: 'pen', pressure: 0.625, tiltX: 15, tiltY: -20,
+                composed: false, cancelable: true, clientX: 5, clientY: 5
             });
+            // These enumerable getters must never be read by the snapshotter.
+            const deprecatedRead = () => { throw new Error('Deprecated mouse getter was read'); };
+            Object.defineProperty(event, 'mozPressure', {enumerable: true, get: deprecatedRead});
+            Object.defineProperty(event, 'mozInputSource', {enumerable: true, get: deprecatedRead});
             event.qtEventSnapshotProbe = true;
             windowElement.dispatchEvent(event);
             const queued = Module.qtSuspendResumeControl.pendingEvents.find(
                 item => item.arg && item.arg.qtEventSnapshotProbe);
             if (!queued || event.target !== null || queued.arg.target !== windowElement
-                || !queued.arg.composedPath().includes(windowElement))
+                || !queued.arg.composedPath().includes(windowElement)
+                || queued.arg.pointerType !== 'pen' || queued.arg.pressure !== 0.625
+                || queued.arg.tiltX !== event.tiltX || queued.arg.tiltY !== event.tiltY)
                 return 0;
             queued.arg.preventDefault();
             return event.defaultPrevented ? 1 : 0;
-        }), "queued DOM event preserves its target, path and bound methods");
+        }), "queued pointer event preserves standard pen fields without reading deprecated getters");
+        // clang-format on
         QTimer::singleShot(0, &app, [] {
             std::printf("LOOP_PROBE_OK: %d checks\n", checks);
             EM_ASM({ fetch('/__probe_result?status=LOOP_PROBE_OK');});

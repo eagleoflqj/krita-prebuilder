@@ -6,12 +6,13 @@ https://github.com/qt/qtbase/commit/e2ac21456a906684b4edc588412038c4fc4b69e4
 
 Qt 6.10 also reads composedPath() in its deferred platform handler, so
 preserve that transient value as well. Non-Event timer arguments pass through.
+Skip deprecated Firefox mouse getters; Qt reads standard PointerEvent fields.
 The upstream source file retains its original copyright and license notices.
 
 diff --git a/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp b/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp
 --- a/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp
 +++ b/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp
-@@ -65,9 +65,25 @@
+@@ -65,9 +65,28 @@
  // The wasm instance will then call the C++ event after it is resumed.
  void qtRegisterEventHandlerJs(int index) {
      EM_ASM({
@@ -23,6 +24,9 @@ diff --git a/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp b/src/corel
 +            const path = event.composedPath();
 +            const copy = {};
 +            for (const key in event) {
++                // Qt uses PointerEvent.pressure and PointerEvent.pointerType.
++                if (key === 'mozPressure' || key === 'mozInputSource')
++                    continue;
 +                const value = event[key];
 +                copy[key] = typeof value === 'function' ? value.bind(event) : value;
 +            }

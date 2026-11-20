@@ -98,15 +98,30 @@ def main() -> None:
         ]
     )
     run(["cmake", "--build", build, "--parallel", "2"])
-    objects = list(build.rglob("qwasmsuspendresumecontrol.cpp.o"))
-    if len(objects) != 1:
-        raise ValueError("Expected one corrected QtCore object")
+    objects = []
+    for name in (
+        "qwasmsuspendresumecontrol.cpp.o",
+        "qcollator.cpp.o",
+        "qcollator_wasm.cpp.o",
+    ):
+        matches = list(build.rglob(name))
+        if len(matches) != 1:
+            raise ValueError(f"Expected one corrected QtCore object: {name}")
+        objects.append(matches[0])
     ar = emsdk / "upstream/emscripten/emar"
     members = subprocess.check_output(
         [str(ar), "t", str(core)], text=True, env=environment
     ).splitlines()
-    if members.count(objects[0].name) != 1:
-        raise ValueError("Base QtCore archive member identity mismatch")
+    for name in ("qwasmsuspendresumecontrol.cpp.o", "qcollator.cpp.o"):
+        if members.count(name) != 1:
+            raise ValueError(f"Base QtCore archive member identity mismatch: {name}")
+    backends = [
+        name
+        for name in ("qcollator_posix.cpp.o", "qcollator_wasm.cpp.o")
+        if name in members
+    ]
+    if len(backends) != 1 or members.count(backends[0]) != 1:
+        raise ValueError("Expected one base QtCore collation backend")
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(
         prefix="qtcore-package-", dir=ROOT / "build"
@@ -116,11 +131,20 @@ def main() -> None:
         library = stage / "target/lib/libQt6Core.a"
         library.parent.mkdir(parents=True)
         shutil.copyfile(core, library)
-        run([ar, "rD", library, objects[0]])
+        run([ar, "dD", library, backends[0]])
+        run([ar, "rD", library, *objects])
         run([ar, "sD", library])
+        private = (
+            stage / f"target/include/QtCore/{QT_VERSION}/QtCore/private/qcollator_p.h"
+        )
+        private.parent.mkdir(parents=True)
+        shutil.copyfile(source / "src/corelib/text/qcollator_p.h", private)
         shutil.copytree(
             base / "licenses/qtbase", stage / "licenses/qtbase", symlinks=True
         )
+        own_license = stage / "licenses/krita-prebuilder"
+        own_license.mkdir(parents=True)
+        shutil.copyfile(ROOT / "LICENSE", own_license / "LICENSE")
         provenance = {
             "schema": 1,
             "stage": "qtcore",

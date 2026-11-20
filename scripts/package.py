@@ -171,6 +171,9 @@ def build_stage(stage: Path, profile: str) -> SDKManifest:
     # complete unmodified archives and patches in the corresponding source pack.
     from sdk import prepare
 
+    own_license = stage / "licenses/krita-prebuilder"
+    own_license.mkdir(parents=True)
+    shutil.copy2(ROOT / "LICENSE", own_license / "LICENSE")
     packages = PACKAGES
     for component in packages:
         source = prepare(component)

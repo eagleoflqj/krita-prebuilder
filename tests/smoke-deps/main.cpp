@@ -9,6 +9,11 @@
 #include <KSharedConfig>
 #include <QApplication>
 #include <QBuffer>
+#include <QCollator>
+#include <QDir>
+#include <QElapsedTimer>
+#include <QFile>
+#include <QFileSystemModel>
 #include <QImage>
 #include <QLabel>
 #include <QPainter>
@@ -17,8 +22,11 @@
 #include <QQuickItem>
 #include <QStandardItemModel>
 #include <QSvgRenderer>
+#include <QTemporaryDir>
 #include <QTextCodec>
+#include <QThread>
 #include <QTimeZone>
+#include <QTimer>
 #include <exiv2/exiv2.hpp>
 #include <fontconfig/fontconfig.h>
 #include <ft2build.h>
@@ -33,6 +41,7 @@
 #include <cstdio>
 #include <cstring>
 #include <emscripten.h>
+#include <fcntl.h>
 #include <fribidi.h>
 #include <functional>
 #include <gsl/gsl_linalg.h>
@@ -41,8 +50,11 @@
 #include <lager/state.hpp>
 #include <lcms2.h>
 #include <linebreak.h>
+#include <memory>
 #include <numeric>
 #include <png.h>
+#include <unistd.h>
+#include <utility>
 #include <vector>
 #include <xsimd/xsimd.hpp>
 #include <zlib.h>
@@ -194,6 +206,72 @@ static void textAndFonts() {
     require(breaks[1] == LINEBREAK_ALLOWBREAK, "Unicode line breaking");
 }
 
+// A QFile whose native descriptor reaches EOF before Qt's cached position.
+// Bound the number of reads so an unfixed SDK fails instead of spinning forever.
+class ConfigReadFile : public QFile {
+  public:
+    using QFile::QFile;
+    int reads = 0;
+    bool fail = false;
+
+  protected:
+    qint64 readLineData(char *data, qint64 maximum) override {
+        require(++reads <= 2, "KConfig must stop when a line read makes no progress");
+        if (fail) {
+            require(::close(handle()) == 0, "inject native configuration read error");
+            fail = false;
+        }
+        return QFile::readLineData(data, maximum);
+    }
+};
+
+static void configReadFailures() {
+    QTemporaryDir directory;
+    require(directory.isValid(), "config read fixture directory");
+    const auto path = directory.filePath(QStringLiteral("kritarc"));
+    const QByteArray original("[smoke]\nvalue=42");
+    {
+        QFile fixture(path);
+        require(fixture.open(QIODevice::WriteOnly) && fixture.write(original) == original.size(),
+                "config read fixture");
+    }
+    {
+        auto file = std::make_shared<QFile>(path);
+        require(file->open(QIODevice::ReadOnly), "normal config fixture open");
+        KConfig config(file);
+        require(KConfigGroup(&config, "smoke").readEntry("value", 0) == 42,
+                "normal config reads include the final line without a newline");
+    }
+    {
+        auto file = std::make_shared<ConfigReadFile>(path);
+        require(file->open(QIODevice::ReadOnly | QIODevice::Unbuffered), "config EOF fixture open");
+        require(::lseek(file->handle(), original.size(), SEEK_SET) == original.size(),
+                "advance config descriptor without advancing Qt position");
+        require(!file->atEnd(), "config EOF fixture preserves the stale Qt position");
+        KConfig config(file);
+        require(file->reads == 1, "KConfig returns after a no-progress line read");
+    }
+    {
+        auto file = std::make_shared<ConfigReadFile>(path);
+        const int descriptor = ::open(QFile::encodeName(path).constData(), O_RDWR);
+        require(descriptor >= 0 &&
+                    file->open(descriptor, QIODevice::ReadWrite | QIODevice::Unbuffered,
+                               QFileDevice::DontCloseHandle),
+                "config error fixture open");
+        file->fail = true;
+        KConfig config(file);
+        require(file->reads == 1 && file->error() == QFileDevice::ReadError,
+                "KConfig returns after a real file read error");
+        KConfigGroup group(&config, "smoke");
+        group.writeEntry("value", 99);
+        require(!config.sync(), "KConfig must not write a partially read configuration");
+        QFile check(path);
+        require(check.open(QIODevice::ReadOnly) && check.readAll() == original,
+                "failed config read preserves original bytes");
+        config.markAsClean();
+    }
+}
+
 static void templatesAndKde() {
     Eigen::Matrix2d matrix;
     matrix << 2, 0, 0, 4;
@@ -292,11 +370,140 @@ static void qmlAndQuick() {
             "Static Quick Controls plugin");
 }
 
+static void collation(QApplication *app, QLabel *label) {
+    const auto order = [](const QCollator &collator, const QString &left, const QString &right,
+                          int expected) {
+        const auto sign = [](int result) { return (result > 0) - (result < 0); };
+        require(sign(collator.compare(left, right)) == expected, "collation comparison");
+        require(sign(collator.sortKey(left).compare(collator.sortKey(right))) == expected,
+                "collation sort keys agree with comparison");
+    };
+    QCollator german(QLocale(QStringLiteral("de_DE")));
+    order(german, QStringLiteral("ä"), QStringLiteral("z"), -1);
+    const auto germanKey = german.sortKey(QStringLiteral("ä"));
+    const auto germanZ = german.sortKey(QStringLiteral("z"));
+    german.setLocale(QLocale(QStringLiteral("sv_SE")));
+    order(german, QStringLiteral("ä"), QStringLiteral("z"), 1);
+    require(germanKey.compare(germanZ) < 0, "sort keys retain locale after collator mutation");
+    auto detachedKeys = [] {
+        QCollator collator(QLocale(QStringLiteral("sv_SE")));
+        return std::pair(collator.sortKey(QStringLiteral("ä")),
+                         collator.sortKey(QStringLiteral("z")));
+    }();
+    const auto copiedKey = detachedKeys.first;
+    auto movedKey = std::move(detachedKeys.first);
+    require(copiedKey.compare(detachedKeys.second) > 0 && movedKey.compare(detachedKeys.second) > 0,
+            "copied/moved keys outlive their collator");
+
+    QCollator english(QLocale(QStringLiteral("en_US")));
+    order(english, QStringLiteral("A"), QStringLiteral("a"), 1);
+    order(english, QStringLiteral("file2"), QStringLiteral("file10"), 1);
+    english.setCaseSensitivity(Qt::CaseInsensitive);
+    order(english, QStringLiteral("A"), QStringLiteral("a"), 0);
+    order(english, QStringLiteral("e"), QStringLiteral("é"), -1);
+    english.setNumericMode(true);
+    order(english, QStringLiteral("File2"), QStringLiteral("file10"), -1);
+    const auto numericKey = english.sortKey(QStringLiteral("file2"));
+    const auto numericTen = english.sortKey(QStringLiteral("file10"));
+    QCollator copy = english;
+    copy.setNumericMode(false);
+    order(copy, QStringLiteral("file2"), QStringLiteral("file10"), 1);
+    require(numericKey.compare(numericTen) < 0 && english.numericMode(),
+            "collator copy detaches without changing earlier keys");
+    english.setIgnorePunctuation(true);
+    order(english, QStringLiteral("a-b"), QStringLiteral("ab"), 0);
+    order(english, QString::fromUtf16(u"a\0z", 3), QString::fromUtf16(u"a\0a", 3), 1);
+    const QString longPrefix(100000, QLatin1Char('x'));
+    order(english, longPrefix + QLatin1Char('z'), longPrefix + QLatin1Char('a'), 1);
+    order(english, QString(), QString(), 0);
+    order(english, QString(), QStringLiteral("a"), -1);
+
+    QCollator c(QLocale::c());
+    c.setNumericMode(true);
+    c.setIgnorePunctuation(true);
+    order(c, QStringLiteral("file2"), QStringLiteral("file10"), 1);
+    c.setCaseSensitivity(Qt::CaseInsensitive);
+    order(c, QStringLiteral("A"), QStringLiteral("a"), 0);
+
+    QCollator threaded(QLocale(QStringLiteral("tr_TR")));
+    threaded.setCaseSensitivity(Qt::CaseInsensitive);
+    threaded.setNumericMode(true);
+    const auto threadKey = threaded.sortKey(QStringLiteral("file2"));
+    const auto threadTen = threaded.sortKey(QStringLiteral("file10"));
+    auto *thread = QThread::create([threaded, threadKey, threadTen] {
+        configReadFailures();
+        require(threaded.compare(QStringLiteral("I"), QStringLiteral("ı")) == 0,
+                "Turkish case comparison on a worker");
+        for (int round = 0; round < 64; ++round) {
+            require(threaded.compare(QStringLiteral("file2"), QStringLiteral("file10")) < 0 &&
+                        threadKey.compare(threadTen) < 0,
+                    "collator and sort keys transfer between threads");
+        }
+    });
+    thread->setParent(app);
+
+    const QLocale previous;
+    QLocale::setDefault(QLocale(QStringLiteral("en_US")));
+    auto directory = std::make_shared<QTemporaryDir>();
+    require(directory->isValid(), "collation directory fixture");
+    const QStringList expected{QStringLiteral("Folder2"), QStringLiteral("folder10"),
+                               QStringLiteral("file1.kra"), QStringLiteral("file2.kra"),
+                               QStringLiteral("File10.kra")};
+    for (const QString &folder : expected.first(2))
+        require(QDir(directory->path()).mkdir(folder), "collation folder creation");
+    for (const QString &name : expected.sliced(2)) {
+        QFile file(directory->filePath(name));
+        require(file.open(QIODevice::WriteOnly) && file.write("probe") == 5,
+                "collation file creation");
+    }
+    auto *model = new QFileSystemModel(app);
+    model->setFilter(QDir::AllEntries | QDir::NoDotAndDotDot);
+    auto *timer = new QTimer(model);
+    QElapsedTimer elapsed;
+    elapsed.start();
+    QObject::connect(timer, &QTimer::timeout, app,
+                     [model, timer, directory, expected, elapsed, previous, label] {
+                         const auto root = model->index(directory->path());
+                         model->sort(0, Qt::AscendingOrder);
+                         QStringList names;
+                         for (int row = 0; row < model->rowCount(root); ++row)
+                             names.append(model->fileName(model->index(row, 0, root)));
+                         if (names != expected) {
+                             if (elapsed.elapsed() > 10000)
+                                 qFatal("QFileSystemModel natural order: %s",
+                                        qPrintable(names.join(',')));
+                             return;
+                         }
+                         timer->stop();
+                         QLocale::setDefault(previous);
+                         label->setText(QStringLiteral("SDK_DEPS_OK"));
+                         EM_ASM({
+            document.title = 'SDK_DEPS_OK';
+            document.getElementById('status').textContent = 'SDK_DEPS_OK';
+            if (new URLSearchParams(location.search).has('test')) fetch('/__probe_result?status=SDK_DEPS_OK');
+        });
+                     });
+    QObject::connect(thread, &QThread::finished, app, [model, timer, directory] {
+        model->setRootPath(directory->path());
+        timer->start(20);
+    });
+    thread->start();
+    for (int round = 0; round < 64; ++round) {
+        require(threaded.compare(QStringLiteral("file2"), QStringLiteral("file10")) < 0 &&
+                    threadKey.compare(threadTen) < 0,
+                "main and worker comparisons share immutable native rules");
+    }
+}
+
 int main(int argc, char **argv) {
     qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &, const QString &message) {
         const auto text = message.toUtf8();
         EM_ASM({ fetch('/__probe_log?message=' + encodeURIComponent(UTF8ToString($0))); }, text.constData());
-        if (type == QtFatalMsg)
+        const bool collationWarning =
+            message.contains(QStringLiteral("collation implementation")) ||
+            message.contains(QStringLiteral("Case insensitive sorting unsupported")) ||
+            message.contains(QStringLiteral("Numeric mode unsupported"));
+        if (type == QtFatalMsg || collationWarning)
             EM_ASM({ fetch('/__probe_result?status=' + encodeURIComponent('FAIL: ' + UTF8ToString($0))); }, text.constData());
     });
     std::puts("SDK probe: QApplication");
@@ -308,15 +515,14 @@ int main(int argc, char **argv) {
     textAndFonts();
     std::puts("SDK probe: templates/KDE");
     templatesAndKde();
+    std::puts("SDK probe: configuration read failure and EOF");
+    configReadFailures();
     std::puts("SDK probe: shader/QML/Quick");
     qmlAndQuick();
-    auto *label = new QLabel(QStringLiteral("SDK_DEPS_OK"));
+    std::puts("SDK probe: collation and real filesystem model");
+    auto *label = new QLabel(QStringLiteral("Checking SDK collation…"));
     label->show();
-    EM_ASM({
-        document.title = 'SDK_DEPS_OK';
-        document.getElementById('status').textContent = 'SDK_DEPS_OK';
-        if (new URLSearchParams(location.search).has('test')) fetch('/__probe_result?status=SDK_DEPS_OK');
-    });
+    collation(app, label);
 #ifdef QT_HAVE_EMSCRIPTEN_ASYNCIFY
     return app->exec();
 #else

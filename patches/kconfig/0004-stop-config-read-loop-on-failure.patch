@@ -1,0 +1,53 @@
+From eda82fbff9c9928e7c988888ff6853b269abb7c5 Mon Sep 17 00:00:00 2001
+From: Vivek Vardhan Modi <vivekvardhanmodi@gmail.com>
+Date: Tue, 13 Oct 2026 02:44:14 +0530
+Subject: [PATCH] KConfigIni: Stop parseConfig loop when readLineInto fails
+
+When QIODevice::readLineInto() returns false, parseConfig() only logged a
+warning and kept going. Qt empties the buffer on failure, so the empty-line
+check right after just did `continue`, with nothing moving forward and
+errorCount untouched. If atEnd() stays false, for example because Qt's
+cached position and the fd offset are out of sync, the loop never ends and
+the process spins at 100% CPU.
+
+Leave the loop when the read fails. If the device is a QFileDevice that
+reports an error, return ParseOpenError instead, so writeConfig() can't
+overwrite the file with a partial parse.
+
+BUG: 526441
+
+Backported to 6.24.0: retain the existing Qt < 6.9 parser branch.
+
+---
+
+diff --git a/src/core/kconfigini.cpp b/src/core/kconfigini.cpp
+--- a/src/core/kconfigini.cpp
++++ b/src/core/kconfigini.cpp
+@@ -13,6 +13,8 @@
+ #include "kconfigdata_p.h"
+ #include "kconfiginibackendreader_p.h"
+ 
++#include <QFileDevice>
++
+ using namespace Qt::StringLiterals;
+ 
+ KCONFIGCORE_EXPORT bool kde_kiosk_exception = false; // flag to disable kiosk restrictions
+@@ -84,10 +86,15 @@
+ #if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+     QByteArray buffer(initialBufferSize, Qt::Uninitialized);
+     while (!file->atEnd() && errorCount < MAX_ERRORS) {
+-        auto res = file->readLineInto(&buffer, maximumSizeWithoutNewLine);
++        bool res = file->readLineInto(&buffer, maximumSizeWithoutNewLine);
+         if (!res) {
+-            qCWarning(KCONFIG_CORE_LOG) << "Couldn't find a single line in " << mDeviceInterface->id() << " after reading" << (maximumSizeWithoutNewLine)
+-                                        << "bytes.";
++            auto fileDevice = qobject_cast<QFileDevice *>(file.get());
++            if (fileDevice && fileDevice->error() != QFileDevice::NoError) {
++                qCWarning(KCONFIG_CORE_LOG) << "Couldn't read" << mDeviceInterface->id() << "after line" << lineNo << ":"
++                                            << fileDevice->errorString();
++                return ParseOpenError;
++            }
++            break;
+         }
+ #else
+     QDataStream stream(file.get());

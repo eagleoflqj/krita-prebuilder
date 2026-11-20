@@ -42,13 +42,19 @@ The supplement contains GNU gettext host tools, libintl, KI18n/Transcript and Qt
 
 ## QtCore correction supplement
 
-Fresh full builds include the Qt native-event dispatch patches. Queued browser events snapshot their transient target and composed path before dispatch returns; the event-loop probe exercises this through a real Shadow DOM pointer event as well as synchronous dialogs, threads and exceptions. Consumers that need a separate archive bound to an immutable base can generate the existing supplement with:
+Fresh full builds include the Qt native-event dispatch and WebAssembly collation patches. Queued browser events snapshot their transient target and composed path before dispatch returns; the event-loop probe exercises this through a real Shadow DOM pointer event as well as synchronous dialogs, threads and exceptions. Consumers that need a separate archive bound to an immutable base can generate the existing supplement with:
 
 ```sh
 python3 scripts/qtcore-correction.py --base-sdk PATH_TO_VERIFIED_BASE --output cache/prebuilt/qtcore-local
 ```
 
-This copies the base QtCore archive before replacing its corrected object. It verifies the exact base inventory and includes corresponding Qt source and licenses. Choose a new output directory rather than overwriting an existing package.
+This copies the base QtCore archive before replacing its event-dispatch and collation objects, and includes the matching private collation header. It verifies the exact base inventory and includes corresponding Qt source and licenses. Choose a new output directory rather than overwriting an existing package.
+
+## Browser collation
+
+Qt on WebAssembly uses the current browser’s `Intl.Collator` for locale-aware, case-insensitive, numeric and punctuation-aware sorting. It does not bundle ICU data. The C locale retains Qt’s string comparison behavior. JavaScript collators remain local to the calling worker; Qt collators and sort keys can be copied between threads. Because the browser does not expose precomputed sort keys, `QCollatorSortKey` retains a snapshot of the comparison rules and text and compares through the same backend. It preserves comparison semantics without the precomputation speedup of ICU keys. Locale data and some ordering details follow the browser version.
+
+The dependency probe checks direct comparisons, sort-key lifetimes and copies, C-locale behavior, cross-thread use and a real `QFileSystemModel` directory listing. Unsupported collation warnings fail the probe. Existing CI runs this probe against both the build prefix and the relocated packaged SDK.
 
 ## Verification boundary
 

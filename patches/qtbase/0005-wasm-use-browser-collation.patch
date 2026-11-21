@@ -1,0 +1,122 @@
+Subject: [PATCH] Use browser collation for Qt on WebAssembly
+
+Use Intl.Collator for locale-aware, case-insensitive, numeric and punctuation
+comparisons without an ICU payload. Keep C-locale comparisons in QString.
+
+Intl objects stay in the current worker. Sort keys retain the comparison
+rules and text, so they survive collator changes/destruction and can move
+between threads without carrying JavaScript handles. Key comparison uses
+Intl instead of precomputing an unavailable native sort-key representation.
+
+diff --git a/src/corelib/CMakeLists.txt b/src/corelib/CMakeLists.txt
+--- a/src/corelib/CMakeLists.txt
++++ b/src/corelib/CMakeLists.txt
+@@ -922,7 +922,12 @@
+         text/qcollator_macx.cpp
+ )
+ 
+-qt_internal_extend_target(Core CONDITION UNIX AND NOT MACOS AND NOT QT_FEATURE_icu
++qt_internal_extend_target(Core CONDITION WASM AND NOT QT_FEATURE_icu
++    SOURCES
++        text/qcollator_wasm.cpp
++)
++
++qt_internal_extend_target(Core CONDITION UNIX AND NOT MACOS AND NOT WASM AND NOT QT_FEATURE_icu
+     SOURCES
+         text/qcollator_posix.cpp
+ )
+diff --git a/src/corelib/text/qcollator_p.h b/src/corelib/text/qcollator_p.h
+--- a/src/corelib/text/qcollator_p.h
++++ b/src/corelib/text/qcollator_p.h
+@@ -44,6 +44,14 @@
+ typedef QString CollatorKeyType;
+ typedef int CollatorType;
+ const CollatorType NoCollator = 0;
++
++#elif defined(Q_OS_WASM)
++struct CollatorKeyType {
++    QCollator collator;
++    QString text;
++};
++typedef bool CollatorType;
++const CollatorType NoCollator = false;
+ 
+ #else // posix - ignores CollatorType collator, only handles system locale
+ typedef QList<wchar_t> CollatorKeyType;
+diff --git a/src/corelib/text/qcollator_wasm.cpp b/src/corelib/text/qcollator_wasm.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/corelib/text/qcollator_wasm.cpp
+@@ -0,0 +1,72 @@
++// Copyright (C) 2026 Krita contributors.
++// Licensed under MIT; see the krita-prebuilder LICENSE.
++
++#include "qcollator_p.h"
++#include "qstring.h"
++
++#include <emscripten.h>
++
++EM_JS_DEPS(qt_wasm_collator, "$UTF8ToString");
++
++QT_BEGIN_NAMESPACE
++
++void QCollatorPrivate::init() { dirty = false; }
++
++void QCollatorPrivate::cleanup() {}
++
++int QCollator::compare(QStringView left, QStringView right) const {
++    if (left.isEmpty())
++        return right.isEmpty() ? 0 : -1;
++    if (right.isEmpty())
++        return 1;
++    if (d->isC())
++        return left.compare(right, d->caseSensitivity);
++
++    const QByteArray locale = d->locale.bcp47Name().toUtf8();
++    const int flags = (d->caseSensitivity == Qt::CaseInsensitive ? 1 : 0) |
++                      (d->numericMode ? 2 : 0) | (d->ignorePunctuation ? 4 : 0);
++    return EM_ASM_INT({
++        const locale = UTF8ToString($0);
++        const flags = $1;
++        const key = locale + ':' + flags;
++        // Module and its cached Intl object belong to the calling worker.
++        // C++ collators/keys contain no thread-local JavaScript handles.
++        let entry = Module['qtCollator'];
++        if (!entry || entry.key !== key) {
++            entry = ({
++                key,
++                collator: new Intl.Collator(locale, {
++                    usage: 'sort',
++                    sensitivity: flags & 1 ? 'accent' : 'variant',
++                    numeric: !!(flags & 2),
++                    ignorePunctuation: !!(flags & 4)
++                })
++            });
++            Module['qtCollator'] = entry;
++        }
++        // Length-aware UTF-16 preserves embedded NULs and surrogate code
++        // units; chunks avoid JavaScript's argument-count limit.
++        const stringAt = (pointer, length) => {
++            let result = "";
++            for (let offset = 0; offset < length; offset += 1024) {
++                const begin = (pointer >>> 1) + offset;
++                const end = begin + Math.min(1024, length - offset);
++                result += String.fromCharCode(...HEAPU16.subarray(begin, end));
++            }
++            return result;
++        };
++        return entry.collator.compare(stringAt($2, $3), stringAt($4, $5));
++    }, locale.constData(), flags, left.data(), left.size(), right.data(), right.size());
++}
++
++QCollatorSortKey QCollator::sortKey(const QString &string) const {
++    // Intl exposes comparisons rather than opaque sort keys. Retain an
++    // implicitly shared snapshot of the rules and text for key comparisons.
++    return QCollatorSortKey(new QCollatorSortKeyPrivate(CollatorKeyType{*this, string}));
++}
++
++int QCollatorSortKey::compare(const QCollatorSortKey &otherKey) const {
++    return d->m_key.collator.compare(d->m_key.text, otherKey.d->m_key.text);
++}
++
++QT_END_NAMESPACE

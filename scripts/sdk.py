@@ -383,6 +383,7 @@ def build(component: str, jobs: int) -> None:
                 "-feature-system-zlib",
                 "-no-feature-fontconfig",
                 "-feature-printsupport",
+                "-no-feature-icu",
                 "--",
                 f"-DCMAKE_PREFIX_PATH={TARGET}",
                 f"-DCMAKE_FIND_ROOT_PATH={TARGET}",

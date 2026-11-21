@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 3.22)
 project(qtcore_dispatch_correction LANGUAGES CXX)
 find_package(Qt6 6.10.2 EXACT REQUIRED COMPONENTS Core CorePrivate)
-add_library(dispatch OBJECT "${QT_SOURCE}/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp")
+add_library(dispatch OBJECT
+    "${QT_SOURCE}/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp"
+    "${QT_SOURCE}/src/corelib/text/qcollator.cpp"
+    "${QT_SOURCE}/src/corelib/text/qcollator_wasm.cpp")
 target_link_libraries(dispatch PRIVATE Qt6::CorePrivate)
 target_compile_features(dispatch PRIVATE cxx_std_17)
 target_compile_definitions(dispatch PRIVATE QT_BUILD_CORE_LIB)

@@ -1,3 +1,12 @@
+Subject: [PATCH] Handle reentrant Wasm native-event dispatch
+
+Related upstream change:
+https://github.com/qt/qtbase/commit/3a217d2592602fb4bdef28d721871a161ecfb16f
+
+A nested event loop may drain the shared pending-event queue. Check its
+remaining length before shifting another event. Unlike the upstream change,
+keep the initial batch bound and report how many events were dispatched.
+
 diff --git a/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp b/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp
 --- a/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp
 +++ b/src/corelib/platform/wasm/qwasmsuspendresumecontrol.cpp

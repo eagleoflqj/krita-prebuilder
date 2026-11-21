@@ -15,6 +15,8 @@ reports an error, return ParseOpenError instead, so writeConfig() can't
 overwrite the file with a partial parse.
 
 BUG: 526441
+Upstream issue: https://bugs.kde.org/show_bug.cgi?id=526441
+Upstream commit: https://invent.kde.org/frameworks/kconfig/-/commit/eda82fbff9c9928e7c988888ff6853b269abb7c5
 
 Backported to 6.24.0: retain the existing Qt < 6.9 parser branch.
 

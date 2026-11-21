@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import NotRequired, TypedDict
 
-from sdk import CACHE_DIR, EMSCRIPTEN_VERSION, PACKAGES, QT_VERSION, emsdk_root
+from sdk import CACHE_DIR, EMSCRIPTEN_VERSION, PACKAGES, QT_VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_DIR = ROOT / "build"
@@ -167,8 +167,7 @@ def build_stage(stage: Path, profile: str) -> SDKManifest:
     for pc in (stage / "target/lib/pkgconfig").glob("*.pc"):
         if re.search(r"^Requires(?:\.private)?:.*\bQt6", pc.read_text(), re.MULTILINE):
             pc.unlink()
-    # Carry component license texts alongside the binaries, in addition to the
-    # complete unmodified archives and patches in the corresponding source pack.
+    # Carry component license texts alongside the binaries.
     from sdk import prepare
 
     own_license = stage / "licenses/krita-prebuilder"
@@ -237,62 +236,6 @@ def build_stage(stage: Path, profile: str) -> SDKManifest:
     return manifest
 
 
-def build_sources(stage: Path) -> None:
-    archive_folder = stage / "upstream-archives"
-    archive_folder.mkdir()
-    sources = PACKAGES
-    for entry in sources.values():
-        path = (
-            CACHE_DIR
-            / "downloads"
-            / entry.get("archive", entry["url"].rsplit("/", 1)[1])
-        )
-        if sha256(path) != entry["sha256"]:
-            raise ValueError(f"Source checksum mismatch: {path}")
-        shutil.copy2(path, archive_folder / path.name)
-    for name in [
-        "AGENTS.md",
-        "README.md",
-        "LICENSE",
-        ".gitignore",
-        ".emscripten-version",
-        ".clang-format",
-        "pyproject.toml",
-        "requirements.txt",
-        "sources.json",
-        "patches",
-        "scripts",
-        "docs",
-        "tests",
-        "qtcore-dispatch",
-        ".github",
-    ]:
-        source = ROOT / name
-        if source.is_dir():
-            shutil.copytree(
-                source,
-                stage / "recipes" / name,
-                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-            )
-        elif source.is_file():
-            (stage / "recipes").mkdir(exist_ok=True)
-            shutil.copy2(source, stage / "recipes" / name)
-    sdk = emsdk_root()
-    emscripten = sdk / "upstream/emscripten"
-    version = json.loads((emscripten / "emscripten-version.txt").read_text())
-    expected = EMSCRIPTEN_VERSION
-    if version != expected:
-        raise ValueError("Emscripten source version mismatch")
-    shutil.copytree(
-        emscripten,
-        stage / "emscripten-source",
-        symlinks=True,
-        ignore=shutil.ignore_patterns(
-            "cache", "node_modules", ".git", "__pycache__", "*.pyc"
-        ),
-    )
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -340,20 +283,12 @@ def main() -> None:
                 "PASS: repeated packaging is byte-identical (not an independent rebuild)",
                 flush=True,
             )
-        source_stage = temporary / "sources"
-        source_stage.mkdir()
-        build_sources(source_stage)
-        sources = output / f"krita-wasm-sdk-{tag}-sources.tar.gz"
-        deterministic_archive(source_stage, sources)
-        files = [binary, sources]
-        (output / f"SHA256SUMS-{tag}").write_text(
-            "".join(f"{sha256(path)}  {path.name}\n" for path in files)
-        )
+        hashes = {binary.name: sha256(binary)}
         print(
             json.dumps(
                 {
                     "stage": manifest["stage"],
-                    "archives": {p.name: sha256(p) for p in files},
+                    "archives": hashes,
                 },
                 indent=2,
             )

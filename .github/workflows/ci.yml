@@ -67,7 +67,7 @@ jobs:
           scripts/build-i18n-probe
           scripts/i18n.py package --catalogs build/i18n/catalogs-a --tag ci
 
-      - name: Package SDK and corresponding source
+      - name: Package SDK
         run: scripts/package.py --profile dependencies
 
       - name: Build and package QtCore correction
@@ -95,10 +95,8 @@ jobs:
         run: |
           scripts/package.py --profile dependencies --output-dir build/package-repeat/sdk --check-repeat
           cmp cache/prebuilt/krita-wasm-sdk-stage4-jspi.tar.gz build/package-repeat/sdk/krita-wasm-sdk-stage4-jspi.tar.gz
-          cmp cache/prebuilt/krita-wasm-sdk-stage4-jspi-sources.tar.gz build/package-repeat/sdk/krita-wasm-sdk-stage4-jspi-sources.tar.gz
           scripts/i18n.py package --catalogs build/i18n/catalogs-a --tag ci --output build/package-repeat/i18n --check-repeat
           cmp cache/prebuilt/krita-wasm-i18n-ci.tar.gz build/package-repeat/i18n/krita-wasm-i18n-ci.tar.gz
-          cmp cache/prebuilt/krita-wasm-i18n-ci-sources.tar.gz build/package-repeat/i18n/krita-wasm-i18n-ci-sources.tar.gz
 
       - name: Verify packaged SDK relocation
         run: |

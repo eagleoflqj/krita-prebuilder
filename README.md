@@ -4,7 +4,7 @@ Build recipes and packaging for Krita’s WebAssembly dependencies, including st
 
 ## Build
 
-Follow [Building and verifying the SDK](docs/BUILD.md) for requirements, build commands, browser checks and packaging. SDK and corresponding-source archives are written to `cache/prebuilt/`.
+Follow [Building and verifying the SDK](docs/BUILD.md) for requirements, build commands, browser checks and packaging. SDK binary archives are written to `cache/prebuilt/`. Clone this repository to obtain the recipes and patches; upstream source versions and download URLs are recorded in `sources.json`.
 
 ## License
 

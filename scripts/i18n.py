@@ -247,8 +247,7 @@ def package(
 ) -> None:
     output.mkdir(parents=True, exist_ok=True)
     binary = output / f"krita-wasm-i18n-{tag}.tar.gz"
-    sources = output / f"krita-wasm-i18n-{tag}-sources.tar.gz"
-    if binary.exists() or sources.exists():
+    if binary.exists():
         raise ValueError("Preserving existing i18n archives; choose a new tag/output")
     with tempfile.TemporaryDirectory(
         prefix="i18n-package-", dir=BUILD_DIR / "i18n"
@@ -264,21 +263,9 @@ def package(
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(PREFIX / "host/bin" / name, dest)
         shutil.copytree(catalogs, stage / "target/share")
-        source_stage = temporary / "sources"
         components = ["gettext", "qttranslations", *KDE]
         inputs = PACKAGES
         for component in components:
-            entry = inputs[component]
-            archive = (
-                CACHE_DIR
-                / "downloads"
-                / entry.get("archive", entry["url"].rsplit("/", 1)[1])
-            )
-            if sha256(archive) != entry["sha256"]:
-                raise ValueError(f"Source mismatch: {component}")
-            dest = source_stage / "upstream-archives" / archive.name
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(archive, dest)
             folder = prepare(component)
             for path in folder.iterdir():
                 if path.name.upper().startswith(
@@ -295,30 +282,6 @@ def package(
                     folder / "gettext-runtime/intl/COPYING.LIB",
                     stage / "licenses/gettext/COPYING.LIB",
                 )
-        for name in (
-            "scripts",
-            "sources.json",
-            "patches",
-            "tests",
-            ".github",
-            "docs",
-            "AGENTS.md",
-            "README.md",
-            "LICENSE",
-            ".emscripten-version",
-            ".clang-format",
-            "pyproject.toml",
-            "requirements.txt",
-        ):
-            path = ROOT / name
-            if path.is_dir():
-                shutil.copytree(
-                    path,
-                    source_stage / "recipes" / name,
-                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-                )
-            else:
-                shutil.copy2(path, source_stage / "recipes" / name)
         manifest = {
             "schema": 1,
             "stage": "i18n",
@@ -345,11 +308,8 @@ def package(
             deterministic_archive(stage, repeat)
             if sha256(binary) != sha256(repeat):
                 raise ValueError("Repeated i18n packaging differs")
-        deterministic_archive(source_stage, sources)
     print(
-        json.dumps(
-            {binary.name: sha256(binary), sources.name: sha256(sources)}, indent=2
-        ),
+        json.dumps({binary.name: sha256(binary)}, indent=2),
         flush=True,
     )
 

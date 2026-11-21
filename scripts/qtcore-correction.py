@@ -16,7 +16,6 @@ from sdk import (
     EMSCRIPTEN_VERSION,
     QT_VERSION,
     CommandArg,
-    archive_path,
     emsdk_root,
     prepare,
 )
@@ -161,35 +160,10 @@ def main() -> None:
         (stage / "sdk.json").write_text(
             json.dumps(provenance, indent=2, sort_keys=True) + "\n"
         )
-        sources = Path(staging) / "sources"
-        sources.mkdir()
-        shutil.copyfile(archive_path("qtbase"), sources / archive_path("qtbase").name)
-        for name in ["patches/qtbase", "qtcore-dispatch"]:
-            shutil.copytree(ROOT / name, sources / "recipes" / name)
-        for name in [
-            "sources.json",
-            "LICENSE",
-            ".emscripten-version",
-            ".clang-format",
-            "pyproject.toml",
-            "requirements.txt",
-        ]:
-            shutil.copyfile(ROOT / name, sources / "recipes" / name)
-        for name in ["sdk.py", "package.py", "qtcore-correction.py"]:
-            path = sources / "recipes/scripts" / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(ROOT / "scripts" / name, path)
         output.mkdir()
-        archives = [
-            output / "krita-wasm-qtcore-jspi.tar.gz",
-            output / "krita-wasm-qtcore-jspi-sources.tar.gz",
-        ]
-        deterministic_archive(stage, archives[0])
-        deterministic_archive(sources, archives[1])
-        hashes = {path.name: digest(path) for path in archives}
-        (output / "SHA256SUMS").write_text(
-            "".join(f"{value}  {key}\n" for key, value in hashes.items())
-        )
+        binary = output / "krita-wasm-qtcore-jspi.tar.gz"
+        deterministic_archive(stage, binary)
+        hashes = {binary.name: digest(binary)}
         print(
             json.dumps(
                 {

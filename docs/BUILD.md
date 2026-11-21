@@ -2,7 +2,7 @@
 
 The current recipes use Emscripten 7.0.0, Qt 6.10.2 and KDE Frameworks 6.24.0. Use Emscripten from your current environment (`EMSDK` or `emcc` on `PATH`). `EMSDK_ROOT` is an optional override. The Emscripten version is stored in `.emscripten-version`. Qt versions are read from `sources.json`; all Qt module versions must agree with its `qtbase` entry. The shared installation is read without activation changes. The host build requires Python 3.12 or newer, CMake, Ninja, a native C/C++ compiler, gperf and pkg-config; the workflow records its environment and installs its build utilities.
 
-Downloaded source archives are stored in `cache/downloads/`. Packaged SDK binaries, corresponding sources and checksum files are written to `cache/prebuilt/`. Extracted sources, build directories, install staging, compiler caches, temporary files and logs stay under `build/`. Both directories are ignored by Git. Package filenames retain the `krita-wasm-sdk` prefix used by consumers. Binary packages include file inventories and component notices; corresponding-source packages include locked upstream archives, recipes and patches.
+Downloaded source archives are stored in `cache/downloads/`. Packaged SDK binary archives are written to `cache/prebuilt/`. Extracted sources, build directories, install staging, compiler caches, temporary files and logs stay under `build/`. Both directories are ignored by Git. Package filenames retain the `krita-wasm-sdk` prefix used by consumers. Binary packages include file inventories and component notices. Clone this repository for recipes and patches; `sources.json` records upstream versions, download URLs and input checksums.
 
 ## Build the SDK
 
@@ -38,7 +38,7 @@ scripts/test-browser-probe.py build/jspi/sdk-i18n --expect SDK_I18N_OK
 scripts/i18n.py package --catalogs build/i18n/catalogs-a --tag local --check-repeat
 ```
 
-The supplement contains GNU gettext host tools, libintl, KI18n/Transcript and Qt/KDE catalogs. Its matching source archive includes the recipes, patches and locked supplement inputs. Catalog comparison verifies the two generated catalog trees; it is not an independent full-SDK rebuild.
+The supplement contains GNU gettext host tools, libintl, KI18n/Transcript and Qt/KDE catalogs. Catalog comparison verifies the two generated catalog trees; it is not an independent full-SDK rebuild.
 
 ## QtCore correction supplement
 
@@ -48,7 +48,7 @@ Fresh full builds include the Qt native-event dispatch and WebAssembly collation
 python3 scripts/qtcore-correction.py --base-sdk PATH_TO_VERIFIED_BASE --output cache/prebuilt/qtcore-local
 ```
 
-This copies the base QtCore archive before replacing its event-dispatch and collation objects, and includes the matching private collation header. It verifies the exact base inventory and includes corresponding Qt source and licenses. Choose a new output directory rather than overwriting an existing package.
+This copies the base QtCore archive before replacing its event-dispatch and collation objects, and includes the matching private collation header. It verifies the exact base inventory and includes Qt source provenance and licenses. Choose a new output directory rather than overwriting an existing package.
 
 ## Browser collation
 
@@ -60,7 +60,7 @@ The dependency probe checks direct comparisons, sort-key lifetimes and copies, C
 
 CI runs C/C++ formatting and Python checks first. It then builds and packages the SDK, internationalization supplement and QtCore correction, uploads them, and runs archive checks, catalog and packaging comparisons, and runtime probes. Failed verification does not prevent downloading the uploaded artifacts. A packaged-SDK probe rebuild temporarily hides the original target prefix and uses the extracted SDK with its compiler cache frozen, then runs the resulting probe in Firefox. Repeat packaging uses separate `build/package-repeat/` outputs and compares them with the uploaded archives.
 
-After all checks pass, pushes to `main` and manual runs on `main` create or update the `latest` tag and the `Nightly build` prerelease. It contains the SDK, internationalization and QtCore correction archives, their corresponding sources and available checksum files. PRs and manual runs on other branches do not publish.
+After all checks pass, pushes to `main` and manual runs on `main` create or update the `latest` tag and the `Nightly build` prerelease. It contains the SDK, internationalization and QtCore correction archives, with no separate source archives or checksum assets. Downloads can be verified using the asset digests returned by the GitHub API. PRs and manual runs on other branches do not publish.
 
 A fresh build in this repository and a remote CI run have not yet been verified. Source checksums, target-archive checks and repeated packaging are distinct checks. `--check-repeat` compares packaging of one staged tree, not independent compilation. A cold build, actual browser execution, artifact relocation and two independently compiled matching SDKs must be verified separately. The current workflow uses Ubuntu 26.04 and `emscripten-core/setup-emsdk@v16`, reading its Emscripten version from `.emscripten-version`; its host compiler and complete build image are not yet fully pinned.
 

@@ -6,7 +6,9 @@ Emscripten 7.0.0 headers no longer provide it along this include path.
 Include its defining header rather than altering the CPU feature logic.
 
 Applies to: qtbase 6.10.2
-Upstream status: local PoC compatibility patch, not submitted
+Equivalent upstream fix:
+https://github.com/qt/qtbase/commit/e72d6e46282e476290e657a434ceeeaea40625f7
+The local patch uses the C header spelling in Qt 6.10.2.
 
 diff --git a/src/corelib/global/qsimd.cpp b/src/corelib/global/qsimd.cpp
 --- a/src/corelib/global/qsimd.cpp

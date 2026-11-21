@@ -2,6 +2,14 @@
 
 The current recipes use Emscripten 7.0.0, Qt 6.10.2 and KDE Frameworks 6.24.0. Use Emscripten from your current environment (`EMSDK` or `emcc` on `PATH`). `EMSDK_ROOT` is an optional override. The Emscripten version is stored in `.emscripten-version`. Qt versions are read from `sources.json`; all Qt module versions must agree with its `qtbase` entry. The shared installation is read without activation changes. The host build requires Python 3.12 or newer, CMake, Ninja, a native C/C++ compiler, gperf and pkg-config; the workflow records its environment and installs its build utilities.
 
+Install the Python requirements in an active environment before building:
+
+```sh
+python3 -m venv build/python-checks
+. build/python-checks/bin/activate
+python -m pip install --cache-dir cache/pip -r requirements.txt
+```
+
 Downloaded source archives are stored in `cache/downloads/`. Packaged SDK binary archives are written to `cache/prebuilt/`. Extracted sources, build directories, install staging, compiler caches, temporary files and logs stay under `build/`. Both directories are ignored by Git. Package filenames retain the `krita-wasm-sdk` prefix used by consumers. Binary packages include file inventories and component notices. Clone this repository for recipes and patches; `sources.json` records upstream versions, download URLs and input checksums.
 
 ## Build the SDK
@@ -77,14 +85,12 @@ The default applies formatting; `--check` reports formatting errors without modi
 
 ## Python checks
 
-For local development, create an isolated environment and install the pinned checking tools:
+With the Python environment above active:
 
 ```sh
-python3 -m venv build/python-checks
-build/python-checks/bin/python -m pip install --cache-dir cache/pip -r requirements.txt
-build/python-checks/bin/ruff format --check scripts
-build/python-checks/bin/ruff check scripts
-build/python-checks/bin/mypy
+ruff format --check scripts
+ruff check scripts
+mypy
 ```
 
 CI uses Python 3.14 from `actions/setup-python` and runs these checks directly without creating a virtual environment. Use `build/python-checks/bin/ruff format scripts` to apply formatting locally.
